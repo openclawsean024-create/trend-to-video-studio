@@ -98,7 +98,7 @@ export const exampleVideoJob: VideoJob = {
   promptDraftId: 'prompt_001',
   provider: 'mock-sora-adapter',
   outputUrl: 'memory://video/output.mp4',
-  status: 'queued',
+  status: 'completed',
   createdAt: new Date('2026-03-11T10:15:00Z').toISOString(),
 };
 
@@ -230,4 +230,26 @@ export function updateVideoJobResult(videoJobId: string, outputUrl: string, stat
 
 export function listUploadJobs(): UploadJob[] {
   return [...inMemoryUploadJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function createUploadJob(videoJobId: string, scheduledFor: string): UploadJob {
+  const created: UploadJob = {
+    id: `upload_${Date.now()}`,
+    videoJobId,
+    platform: 'youtube',
+    scheduledFor,
+    createdAt: new Date().toISOString(),
+    status: 'queued',
+  };
+
+  inMemoryUploadJobs.unshift(created);
+  return created;
+}
+
+export function completeUploadJob(uploadJobId: string): UploadJob | undefined {
+  const job = inMemoryUploadJobs.find((item) => item.id === uploadJobId);
+  if (!job) return undefined;
+
+  job.status = 'completed';
+  return job;
 }

@@ -1,6 +1,8 @@
 import {
+  completeUploadJob,
   createMockAnalysisArtifacts,
   createMockPromptDraft,
+  createUploadJob,
   createVideoJob,
   listQueuedTrendCandidates,
   listSourceAssetsByTrendCandidate,
@@ -36,8 +38,15 @@ async function main() {
       'completed',
     );
 
+    const uploadJob = createUploadJob(
+      queuedVideoJob.id,
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    );
+    const completedUploadJob = completeUploadJob(uploadJob.id);
+
     console.log('Mock generation result:', result);
     console.log('Completed video job:', completedVideoJob);
+    console.log('Completed upload job:', completedUploadJob);
     console.log('Current asset count for candidate:', listSourceAssetsByTrendCandidate(candidate.id).length);
   }
 }
