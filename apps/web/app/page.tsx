@@ -9,6 +9,7 @@ import {
   listUploadJobs,
   listVideoJobs,
 } from '@trend-to-video-studio/core';
+import { listVideoProviders } from '@trend-to-video-studio/providers';
 import {
   createPromptAction,
   createTrendCandidateAction,
@@ -69,6 +70,7 @@ export default function HomePage() {
   const uploadJobs = listUploadJobs();
   const pipelineEvents = listPipelineEvents(20);
   const snapshot = getProjectSnapshot();
+  const videoProviders = listVideoProviders();
   const selectedEntityId = pipelineEvents[0]?.entityId;
   const selectedEntityEvents = selectedEntityId
     ? listPipelineEvents(100).filter((event) => event.entityId === selectedEntityId)
@@ -99,6 +101,7 @@ export default function HomePage() {
         <div>Video jobs: {snapshot.videoJobs.length}</div>
         <div>Upload jobs: {snapshot.uploadJobs.length}</div>
         <div>Pipeline events: {snapshot.pipelineEvents.length}</div>
+        <div>Available video providers: {videoProviders.join(', ')}</div>
       </section>
 
       <section style={sectionStyle}>
@@ -106,7 +109,7 @@ export default function HomePage() {
         <ol style={{ margin: 0, paddingLeft: 20 }}>
           <li><strong>Phase 1</strong> — stabilize repository/event model and API validation</li>
           <li><strong>Phase 2</strong> — strengthen operator dashboard and event-log inspection</li>
-          <li><strong>Phase 3</strong> — replace mock provider edges with pluggable real adapters</li>
+          <li><strong>Phase 3</strong> — provider registry, adapter contract, and provider-based job routing</li>
           <li><strong>Phase 4</strong> — automate end-to-end worker orchestration and retries</li>
         </ol>
         <p style={{ marginBottom: 0, color: '#475569' }}>
@@ -188,11 +191,19 @@ export default function HomePage() {
               <form action={createVideoJobAction} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
                 <input type="hidden" name="promptDraftId" value={draft.id} />
                 <label>
+                  Provider
+                  <select name="provider" defaultValue="mock-sora-adapter" style={inputStyle}>
+                    {videoProviders.map((provider) => (
+                      <option key={provider} value={provider}>{provider}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   Override prompt (optional)
                   <textarea name="prompt" rows={3} style={inputStyle} defaultValue={draft.videoPrompt} />
                 </label>
                 <div>
-                  <button type="submit" style={buttonStyle}>Generate mock video</button>
+                  <button type="submit" style={buttonStyle}>Generate video job</button>
                 </div>
               </form>
             </li>

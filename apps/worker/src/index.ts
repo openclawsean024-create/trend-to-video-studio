@@ -10,7 +10,7 @@ import {
   updateTrendCandidateStatus,
   updateVideoJobResult,
 } from '@trend-to-video-studio/core';
-import { mockVideoProvider } from '@trend-to-video-studio/providers';
+import { getVideoProvider } from '@trend-to-video-studio/providers';
 
 type WorkerMode = 'process-all' | 'process-one' | 'dry-run';
 
@@ -27,7 +27,7 @@ function getMode(): WorkerMode {
   return 'process-all';
 }
 
-async function processCandidate(trendCandidateId: string) {
+async function processCandidate(trendCandidateId: string, providerName = 'mock-sora-adapter') {
   const candidate = getTrendCandidateById(trendCandidateId);
   if (!candidate) {
     console.log(`Candidate not found: ${trendCandidateId}`);
@@ -43,10 +43,11 @@ async function processCandidate(trendCandidateId: string) {
   const promptDraft = createMockPromptDraft(candidate.id);
   console.log('Generated prompt draft:', promptDraft);
 
-  const queuedVideoJob = createVideoJob(promptDraft.id);
+  const provider = getVideoProvider(providerName);
+  const queuedVideoJob = createVideoJob(promptDraft.id, provider.name);
   console.log('Queued video job:', queuedVideoJob);
 
-  const result = await mockVideoProvider.generateVideo({
+  const result = await provider.generateVideo({
     prompt: promptDraft.videoPrompt,
   });
 
@@ -82,6 +83,8 @@ async function main() {
     return;
   }
 
+  const providerName = getArg('--provider') ?? 'mock-sora-adapter';
+
   if (mode === 'process-one') {
     const candidateId = getArg('--candidate-id') ?? queuedCandidates[0]?.id;
     if (!candidateId) {
@@ -89,12 +92,12 @@ async function main() {
       return;
     }
 
-    await processCandidate(candidateId);
+    await processCandidate(candidateId, providerName);
     return;
   }
 
   for (const candidate of queuedCandidates) {
-    await processCandidate(candidate.id);
+    await processCandidate(candidate.id, providerName);
   }
 }
 

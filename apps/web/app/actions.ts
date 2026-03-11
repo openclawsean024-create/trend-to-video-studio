@@ -16,7 +16,7 @@ import {
   updateVideoJobResult,
   validateTrendCandidateInputDetailed,
 } from '@trend-to-video-studio/core';
-import { mockVideoProvider } from '@trend-to-video-studio/providers';
+import { getVideoProvider } from '@trend-to-video-studio/providers';
 import { revalidatePath } from 'next/cache';
 
 function asString(value: FormDataEntryValue | null): string {
@@ -65,11 +65,13 @@ export async function createPromptAction(formData: FormData) {
 export async function createVideoJobAction(formData: FormData) {
   const promptDraftId = asString(formData.get('promptDraftId'));
   const prompt = asString(formData.get('prompt'));
+  const providerName = asString(formData.get('provider')) || 'mock-sora-adapter';
   if (!promptDraftId) throw new Error('promptDraftId is required');
   if (!getPromptDraftById(promptDraftId)) throw new Error('promptDraftId does not exist');
 
-  const job = createVideoJob(promptDraftId);
-  const result = await mockVideoProvider.generateVideo({
+  const provider = getVideoProvider(providerName);
+  const job = createVideoJob(promptDraftId, provider.name);
+  const result = await provider.generateVideo({
     prompt: prompt || 'Generate original short-form video',
   });
 
