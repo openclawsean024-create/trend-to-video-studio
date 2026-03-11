@@ -1,4 +1,9 @@
-import { createMockAnalysisArtifacts, listSourceAssets } from '@trend-to-video-studio/core';
+import {
+  createMockAnalysisArtifacts,
+  getTrendCandidateById,
+  listSourceAssets,
+  updateTrendCandidateStatus,
+} from '@trend-to-video-studio/core';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
@@ -10,8 +15,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
+  const trendCandidateId = String(body?.trendCandidateId ?? '');
 
-  if (!body?.trendCandidateId) {
+  if (!trendCandidateId) {
     return NextResponse.json(
       {
         ok: false,
@@ -21,7 +27,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const artifacts = createMockAnalysisArtifacts(String(body.trendCandidateId));
+  if (!getTrendCandidateById(trendCandidateId)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'trendCandidateId does not exist',
+      },
+      { status: 404 },
+    );
+  }
+
+  updateTrendCandidateStatus(trendCandidateId, 'processing');
+  const artifacts = createMockAnalysisArtifacts(trendCandidateId);
 
   return NextResponse.json({
     ok: true,
