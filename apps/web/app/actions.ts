@@ -65,6 +65,9 @@ export async function runAnalysisAction(formData: FormData) {
       trendCandidateId: candidate.id,
       assetType: artifact.assetType,
       uri: artifact.uri,
+      content: artifact.content,
+      summary: artifact.summary,
+      metadata: artifact.metadata,
     })),
   );
   updateTrendCandidateStatus(trendCandidateId, 'completed');

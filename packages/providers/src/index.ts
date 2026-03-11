@@ -19,6 +19,9 @@ export type AnalyzeTrendInput = {
 export type AnalysisArtifactDraft = {
   assetType: 'url' | 'screenshot' | 'transcript' | 'metadata';
   uri: string;
+  content?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type AnalyzeTrendResult = {
@@ -77,14 +80,32 @@ export class BaselineAnalysisProvider implements AnalysisProvider {
         {
           assetType: 'metadata',
           uri: `${stem}/analysis-metadata.json`,
+          summary: `Trend topic centers on ${safeTopic} with short-form hook-first storytelling mechanics.`,
+          metadata: {
+            hookPattern: 'open with a bold curiosity gap in the first 2 seconds',
+            pacing: 'fast escalation across 3 to 5 compact beats',
+            endingStyle: 'close with a decisive reveal or CTA payoff',
+          },
         },
         {
           assetType: 'transcript',
           uri: `${stem}/analysis-transcript.txt`,
+          content: `Hook: Why is ${safeTopic} suddenly everywhere? Beat 1 introduces the premise. Beat 2 escalates with contrast. Beat 3 reveals a useful takeaway. Ending closes with a decisive final line.`,
+          summary: `Transcript structure suggests hook -> escalation -> takeaway -> payoff.`,
+          metadata: {
+            hookLine: `Why is ${safeTopic} suddenly everywhere?`,
+            beatCount: 4,
+          },
         },
         {
           assetType: 'screenshot',
           uri: `${stem}/keyframe-001.png`,
+          summary: `High-contrast close-up focal subject with oversized headline space and urgent visual framing.`,
+          metadata: {
+            composition: 'close-up focal subject',
+            contrast: 'high',
+            textSpace: 'headline-safe upper third',
+          },
         },
       ],
     };

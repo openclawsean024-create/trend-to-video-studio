@@ -34,6 +34,9 @@ export type SourceAsset = {
   trendCandidateId: string;
   assetType: 'url' | 'screenshot' | 'transcript' | 'metadata';
   uri: string;
+  content?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -41,6 +44,9 @@ export type CreateSourceAssetInput = {
   trendCandidateId: string;
   assetType: SourceAsset['assetType'];
   uri: string;
+  content?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type PromptDraft = {
@@ -512,6 +518,9 @@ export class SnapshotProjectRepository implements ProjectRepository {
         trendCandidateId: input.trendCandidateId,
         assetType: input.assetType,
         uri: input.uri.trim(),
+        content: input.content?.trim(),
+        summary: input.summary?.trim(),
+        metadata: input.metadata,
         createdAt,
       }));
 
@@ -596,17 +605,50 @@ export class SnapshotProjectRepository implements ProjectRepository {
     const screenshotAssets = sourceAssets.filter((asset) => asset.assetType === 'screenshot');
     const metadataAssets = sourceAssets.filter((asset) => asset.assetType === 'metadata');
 
+    const transcriptSummaries = transcriptAssets.map((asset) => asset.summary || asset.content).filter(Boolean).slice(0, 2);
+    const metadataSummaries = metadataAssets.map((asset) => asset.summary).filter(Boolean).slice(0, 2);
+    const screenshotSummaries = screenshotAssets.map((asset) => asset.summary).filter(Boolean).slice(0, 2);
+    const hookHints = metadataAssets
+      .map((asset) => String(asset.metadata?.hookPattern ?? ''))
+      .filter(Boolean)
+      .slice(0, 1);
+    const pacingHints = metadataAssets
+      .map((asset) => String(asset.metadata?.pacing ?? ''))
+      .filter(Boolean)
+      .slice(0, 1);
+    const endingHints = metadataAssets
+      .map((asset) => String(asset.metadata?.endingStyle ?? ''))
+      .filter(Boolean)
+      .slice(0, 1);
+    const transcriptHookLines = transcriptAssets
+      .map((asset) => String(asset.metadata?.hookLine ?? ''))
+      .filter(Boolean)
+      .slice(0, 1);
+
     const narrativeSignals = [
       transcriptAssets.length > 0 ? `${transcriptAssets.length} transcript-derived structure cue(s)` : 'no transcript cues yet',
       screenshotAssets.length > 0 ? `${screenshotAssets.length} visual keyframe reference(s)` : 'no keyframe references yet',
       metadataAssets.length > 0 ? `${metadataAssets.length} metadata summary artifact(s)` : 'no metadata summaries yet',
     ].join(', ');
 
+    const contentSummaryBlock = [
+      ...metadataSummaries,
+      ...transcriptSummaries,
+      ...screenshotSummaries,
+    ].filter(Boolean).join(' ');
+
+    const structureHints = [
+      ...hookHints,
+      ...pacingHints,
+      ...endingHints,
+      ...transcriptHookLines,
+    ].filter(Boolean).join('; ');
+
     return this.createPromptDraft({
       trendCandidateId,
       title: `${topic} Prompt Draft`,
-      videoPrompt: `Create an original short-form video about ${topic}. Base the pacing, hook, and scene order on the available analysis artifacts (${narrativeSignals}). Preserve only reusable structure and topic framing from analysis; do not copy source wording, shots, branding, or creator identity. Deliver a 30-45 second video with a strong first-2-second hook, 3-5 escalating beats, and a decisive ending CTA or payoff.`,
-      thumbnailPrompt: `Design a thumbnail for ${topic} using the analyzed visual motifs from ${screenshotAssets.length} screenshot artifact(s) and ${metadataAssets.length} metadata artifact(s). Keep it original, bold, high-contrast, and readable on mobile, with one dominant focal subject and clear text-safe space.`,
+      videoPrompt: `Create an original short-form video about ${topic}. Base the pacing, hook, scene order, and payoff on the available analysis artifacts (${narrativeSignals}). Analysis content summary: ${contentSummaryBlock || 'No detailed summaries available yet.'} Structure hints: ${structureHints || 'Use a strong curiosity-driven hook, compact escalation, and decisive payoff.'} Preserve only reusable structure and topic framing from analysis; do not copy source wording, shots, branding, or creator identity. Deliver a 30-45 second video with a strong first-2-second hook, 3-5 escalating beats, and a decisive ending CTA or payoff.`,
+      thumbnailPrompt: `Design a thumbnail for ${topic} using the analyzed visual motifs from ${screenshotAssets.length} screenshot artifact(s) and ${metadataAssets.length} metadata artifact(s). Visual reference summary: ${screenshotSummaries.join(' ') || 'Use one dominant focal subject, strong contrast, and clear headline-safe space.'} Keep it original, bold, high-contrast, and readable on mobile, with one dominant focal subject and clear text-safe space.`,
     });
   }
 

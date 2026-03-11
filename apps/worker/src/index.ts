@@ -49,6 +49,9 @@ async function processCandidate(trendCandidateId: string, providerName = 'mock-s
       trendCandidateId: candidate.id,
       assetType: artifact.assetType,
       uri: artifact.uri,
+      content: artifact.content,
+      summary: artifact.summary,
+      metadata: artifact.metadata,
     })),
   );
   console.log('Analysis provider result:', analysisResult);
