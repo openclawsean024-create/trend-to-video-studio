@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -97,10 +98,16 @@ export type TrendCandidateValidationResult = {
   youtube?: YouTubeUrlDetails;
 };
 
-const DEFAULT_DATA_FILE = resolve(process.cwd(), '.data', 'project-snapshot.json');
+const DEFAULT_DATA_DIR = resolve(process.cwd(), '.data');
+const DEFAULT_JSON_DATA_FILE = resolve(DEFAULT_DATA_DIR, 'project-snapshot.json');
+const DEFAULT_SQLITE_DATA_FILE = resolve(DEFAULT_DATA_DIR, 'project-snapshot.sqlite');
 const dataFile = process.env.TREND_TO_VIDEO_DATA_FILE
   ? resolve(process.env.TREND_TO_VIDEO_DATA_FILE)
-  : DEFAULT_DATA_FILE;
+  : DEFAULT_JSON_DATA_FILE;
+const sqliteFile = process.env.TREND_TO_VIDEO_SQLITE_FILE
+  ? resolve(process.env.TREND_TO_VIDEO_SQLITE_FILE)
+  : DEFAULT_SQLITE_DATA_FILE;
+const repositoryDriver = (process.env.TREND_TO_VIDEO_REPOSITORY_DRIVER ?? 'json').toLowerCase();
 
 const exampleTrendCandidate: TrendCandidate = {
   id: 'trend_001',
@@ -169,14 +176,10 @@ const initialSnapshot: ProjectSnapshot = {
   ],
 };
 
-function ensureDataFile() {
-  const folder = dirname(dataFile);
+function ensureParentDirectory(targetPath: string) {
+  const folder = dirname(targetPath);
   if (!existsSync(folder)) {
     mkdirSync(folder, { recursive: true });
-  }
-
-  if (!existsSync(dataFile)) {
-    writeFileSync(dataFile, JSON.stringify(initialSnapshot, null, 2), 'utf8');
   }
 }
 
@@ -191,29 +194,123 @@ function normalizeSnapshot(parsed: Partial<ProjectSnapshot>): ProjectSnapshot {
   };
 }
 
-function readSnapshotFromDisk(): ProjectSnapshot {
-  ensureDataFile();
+function ensureJsonDataFile() {
+  ensureParentDirectory(dataFile);
+
+  if (!existsSync(dataFile)) {
+    writeFileSync(dataFile, JSON.stringify(initialSnapshot, null, 2), 'utf8');
+  }
+}
+
+function readSnapshotFromJsonDisk(): ProjectSnapshot {
+  ensureJsonDataFile();
 
   try {
     const raw = readFileSync(dataFile, 'utf8');
     const parsed = JSON.parse(raw) as Partial<ProjectSnapshot>;
     return normalizeSnapshot(parsed);
   } catch {
-    writeSnapshotToDisk(initialSnapshot);
+    writeSnapshotToJsonDisk(initialSnapshot);
     return structuredClone(initialSnapshot);
   }
 }
 
-function writeSnapshotToDisk(snapshot: ProjectSnapshot) {
-  ensureDataFile();
+function writeSnapshotToJsonDisk(snapshot: ProjectSnapshot) {
+  ensureJsonDataFile();
   writeFileSync(dataFile, JSON.stringify(snapshot, null, 2), 'utf8');
 }
 
-function mutateSnapshotOnDisk<T>(mutator: (snapshot: ProjectSnapshot) => T): T {
-  const snapshot = readSnapshotFromDisk();
-  const result = mutator(snapshot);
-  writeSnapshotToDisk(snapshot);
-  return result;
+function ensureSqliteDatabaseFile() {
+  ensureParentDirectory(sqliteFile);
+}
+
+function createSqliteDatabaseConnection() {
+  ensureSqliteDatabaseFile();
+  const database = new Database(sqliteFile);
+  database.pragma('journal_mode = WAL');
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS project_snapshot (
+      key TEXT PRIMARY KEY,
+      json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  return database;
+}
+
+function writeSnapshotToSqlite(snapshot: ProjectSnapshot): void {
+  const database = createSqliteDatabaseConnection();
+  const json = JSON.stringify(snapshot);
+  const updatedAt = new Date().toISOString();
+
+  database
+    .prepare(
+      `
+        INSERT INTO project_snapshot (key, json, updated_at)
+        VALUES ('default', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          json = excluded.json,
+          updated_at = excluded.updated_at
+      `,
+    )
+    .run(json, updatedAt);
+
+  database.close();
+}
+
+function migrateJsonSnapshotToSqliteIfNeeded(database: Database.Database): void {
+  const row = database
+    .prepare('SELECT json FROM project_snapshot WHERE key = ?')
+    .get('default') as { json: string } | undefined;
+
+  if (row?.json) {
+    return;
+  }
+
+  const seedSnapshot = existsSync(dataFile) ? readSnapshotFromJsonDisk() : structuredClone(initialSnapshot);
+  database
+    .prepare('INSERT INTO project_snapshot (key, json, updated_at) VALUES (?, ?, ?)')
+    .run('default', JSON.stringify(seedSnapshot), new Date().toISOString());
+}
+
+function readSnapshotFromSqlite(): ProjectSnapshot {
+  const database = createSqliteDatabaseConnection();
+  migrateJsonSnapshotToSqliteIfNeeded(database);
+
+  try {
+    const row = database
+      .prepare('SELECT json FROM project_snapshot WHERE key = ?')
+      .get('default') as { json: string } | undefined;
+
+    if (!row?.json) {
+      writeSnapshotToSqlite(initialSnapshot);
+      return structuredClone(initialSnapshot);
+    }
+
+    return normalizeSnapshot(JSON.parse(row.json) as Partial<ProjectSnapshot>);
+  } catch {
+    writeSnapshotToSqlite(initialSnapshot);
+    return structuredClone(initialSnapshot);
+  } finally {
+    database.close();
+  }
+}
+
+function getActiveDataDriver(): 'json' | 'sqlite' {
+  return repositoryDriver === 'json' ? 'json' : 'sqlite';
+}
+
+function readSnapshotFromDisk(): ProjectSnapshot {
+  return getActiveDataDriver() === 'sqlite' ? readSnapshotFromSqlite() : readSnapshotFromJsonDisk();
+}
+
+function writeSnapshotToDisk(snapshot: ProjectSnapshot) {
+  if (getActiveDataDriver() === 'sqlite') {
+    writeSnapshotToSqlite(snapshot);
+    return;
+  }
+
+  writeSnapshotToJsonDisk(snapshot);
 }
 
 function createId(prefix: string): string {
@@ -242,15 +339,29 @@ export interface SnapshotStore {
 
 export class JsonFileSnapshotStore implements SnapshotStore {
   read(): ProjectSnapshot {
-    return readSnapshotFromDisk();
+    return readSnapshotFromJsonDisk();
   }
 
   write(snapshot: ProjectSnapshot): void {
-    writeSnapshotToDisk(snapshot);
+    writeSnapshotToJsonDisk(snapshot);
   }
 
   getLabel(): string {
     return dataFile;
+  }
+}
+
+export class SqliteSnapshotStore implements SnapshotStore {
+  read(): ProjectSnapshot {
+    return readSnapshotFromSqlite();
+  }
+
+  write(snapshot: ProjectSnapshot): void {
+    writeSnapshotToSqlite(snapshot);
+  }
+
+  getLabel(): string {
+    return sqliteFile;
   }
 }
 
@@ -567,7 +678,11 @@ export class SnapshotProjectRepository implements ProjectRepository {
   }
 }
 
-const defaultStore = new JsonFileSnapshotStore();
+function createDefaultSnapshotStore(): SnapshotStore {
+  return getActiveDataDriver() === 'sqlite' ? new SqliteSnapshotStore() : new JsonFileSnapshotStore();
+}
+
+const defaultStore = createDefaultSnapshotStore();
 const defaultRepository = new SnapshotProjectRepository(defaultStore);
 
 export function createProjectRepository(store: SnapshotStore = defaultStore): ProjectRepository {
@@ -579,12 +694,17 @@ export function getProjectRepository(): ProjectRepository {
 }
 
 export function getDataFilePath() {
-  ensureDataFile();
+  if (getActiveDataDriver() === 'sqlite') {
+    ensureSqliteDatabaseFile();
+    return sqliteFile;
+  }
+
+  ensureJsonDataFile();
   return dataFile;
 }
 
 export function getSnapshotStoreLabel(): string {
-  return defaultStore.getLabel();
+  return `${getActiveDataDriver()}:${defaultStore.getLabel()}`;
 }
 
 export function getProjectSnapshot(): ProjectSnapshot {

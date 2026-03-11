@@ -52,11 +52,19 @@ Phase 4 operator workflow MVP in progress on 2026-03-11.
 - `pnpm typecheck`
 
 ## Data Storage
-Default snapshot path:
-- `.data/project-snapshot.json`
+Default repository driver:
+- `json`
 
-Override with environment variable:
+Default snapshot paths:
+- SQLite: `.data/project-snapshot.sqlite`
+- JSON fallback: `.data/project-snapshot.json`
+
+Override with environment variables:
+- `TREND_TO_VIDEO_REPOSITORY_DRIVER=sqlite|json`
+- `TREND_TO_VIDEO_SQLITE_FILE=/absolute/path/to/project-snapshot.sqlite`
 - `TREND_TO_VIDEO_DATA_FILE=/absolute/path/to/project-snapshot.json`
+
+When `sqlite` is active, the app auto-migrates the existing JSON snapshot into SQLite on first read if a SQLite snapshot does not exist yet.
 
 ## API Notes
 `POST /api/trend-candidates` accepts:
