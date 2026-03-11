@@ -191,7 +191,7 @@ function normalizeSnapshot(parsed: Partial<ProjectSnapshot>): ProjectSnapshot {
   };
 }
 
-function readSnapshot(): ProjectSnapshot {
+function readSnapshotFromDisk(): ProjectSnapshot {
   ensureDataFile();
 
   try {
@@ -199,20 +199,20 @@ function readSnapshot(): ProjectSnapshot {
     const parsed = JSON.parse(raw) as Partial<ProjectSnapshot>;
     return normalizeSnapshot(parsed);
   } catch {
-    writeSnapshot(initialSnapshot);
+    writeSnapshotToDisk(initialSnapshot);
     return structuredClone(initialSnapshot);
   }
 }
 
-function writeSnapshot(snapshot: ProjectSnapshot) {
+function writeSnapshotToDisk(snapshot: ProjectSnapshot) {
   ensureDataFile();
   writeFileSync(dataFile, JSON.stringify(snapshot, null, 2), 'utf8');
 }
 
-function mutateSnapshot<T>(mutator: (snapshot: ProjectSnapshot) => T): T {
-  const snapshot = readSnapshot();
+function mutateSnapshotOnDisk<T>(mutator: (snapshot: ProjectSnapshot) => T): T {
+  const snapshot = readSnapshotFromDisk();
   const result = mutator(snapshot);
-  writeSnapshot(snapshot);
+  writeSnapshotToDisk(snapshot);
   return result;
 }
 
@@ -232,6 +232,48 @@ function recordEvent(
 
   snapshot.pipelineEvents.unshift(created);
   return created;
+}
+
+export interface SnapshotStore {
+  read(): ProjectSnapshot;
+  write(snapshot: ProjectSnapshot): void;
+  getLabel(): string;
+}
+
+export class JsonFileSnapshotStore implements SnapshotStore {
+  read(): ProjectSnapshot {
+    return readSnapshotFromDisk();
+  }
+
+  write(snapshot: ProjectSnapshot): void {
+    writeSnapshotToDisk(snapshot);
+  }
+
+  getLabel(): string {
+    return dataFile;
+  }
+}
+
+export class MemorySnapshotStore implements SnapshotStore {
+  private snapshot: ProjectSnapshot;
+  private readonly label: string;
+
+  constructor(seed?: Partial<ProjectSnapshot>, label = 'memory://project-snapshot') {
+    this.snapshot = normalizeSnapshot(seed ?? structuredClone(initialSnapshot));
+    this.label = label;
+  }
+
+  read(): ProjectSnapshot {
+    return structuredClone(this.snapshot);
+  }
+
+  write(snapshot: ProjectSnapshot): void {
+    this.snapshot = structuredClone(snapshot);
+  }
+
+  getLabel(): string {
+    return this.label;
+  }
 }
 
 export interface ProjectRepository {
@@ -258,21 +300,30 @@ export interface ProjectRepository {
   listPipelineEvents(limit?: number): PipelineEvent[];
 }
 
-class JsonProjectRepository implements ProjectRepository {
+export class SnapshotProjectRepository implements ProjectRepository {
+  constructor(private readonly store: SnapshotStore) {}
+
+  private mutate<T>(mutator: (snapshot: ProjectSnapshot) => T): T {
+    const snapshot = this.store.read();
+    const result = mutator(snapshot);
+    this.store.write(snapshot);
+    return result;
+  }
+
   getSnapshot(): ProjectSnapshot {
-    return readSnapshot();
+    return this.store.read();
   }
 
   listTrendCandidates(): TrendCandidate[] {
-    return [...readSnapshot().trendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+    return [...this.store.read().trendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
   }
 
   getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined {
-    return readSnapshot().trendCandidates.find((item) => item.id === trendCandidateId);
+    return this.store.read().trendCandidates.find((item) => item.id === trendCandidateId);
   }
 
   createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const created: TrendCandidate = {
         id: createId('trend'),
         topic: input.topic.trim(),
@@ -299,11 +350,11 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listQueuedTrendCandidates(): TrendCandidate[] {
-    return readSnapshot().trendCandidates.filter((candidate) => candidate.status === 'queued');
+    return this.store.read().trendCandidates.filter((candidate) => candidate.status === 'queued');
   }
 
   updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const candidate = snapshot.trendCandidates.find((item) => item.id === trendCandidateId);
       if (!candidate) return undefined;
       candidate.status = status;
@@ -319,15 +370,15 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listSourceAssets(): SourceAsset[] {
-    return [...readSnapshot().sourceAssets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...this.store.read().sourceAssets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
-    return readSnapshot().sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
+    return this.store.read().sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
   }
 
   createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const createdAt = new Date().toISOString();
       const artifacts: SourceAsset[] = [
         {
@@ -363,19 +414,19 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listPromptDrafts(): PromptDraft[] {
-    return [...readSnapshot().promptDrafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...this.store.read().promptDrafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[] {
-    return readSnapshot().promptDrafts.filter((draft) => draft.trendCandidateId === trendCandidateId);
+    return this.store.read().promptDrafts.filter((draft) => draft.trendCandidateId === trendCandidateId);
   }
 
   getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
-    return readSnapshot().promptDrafts.find((draft) => draft.id === promptDraftId);
+    return this.store.read().promptDrafts.find((draft) => draft.id === promptDraftId);
   }
 
   createMockPromptDraft(trendCandidateId: string): PromptDraft {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const trendCandidate = snapshot.trendCandidates.find((candidate) => candidate.id === trendCandidateId);
       const sourceAssets = snapshot.sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
       const topic = trendCandidate?.topic ?? 'Untitled trend';
@@ -405,15 +456,15 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listVideoJobs(): VideoJob[] {
-    return [...readSnapshot().videoJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...this.store.read().videoJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   getVideoJobById(videoJobId: string): VideoJob | undefined {
-    return readSnapshot().videoJobs.find((job) => job.id === videoJobId);
+    return this.store.read().videoJobs.find((job) => job.id === videoJobId);
   }
 
   createVideoJob(promptDraftId: string, provider = 'mock-sora-adapter'): VideoJob {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const created: VideoJob = {
         id: createId('video'),
         promptDraftId,
@@ -438,7 +489,7 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   updateVideoJobResult(videoJobId: string, outputUrl: string, status: JobStatus = 'completed'): VideoJob | undefined {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const job = snapshot.videoJobs.find((item) => item.id === videoJobId);
       if (!job) return undefined;
 
@@ -459,11 +510,11 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listUploadJobs(): UploadJob[] {
-    return [...readSnapshot().uploadJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...this.store.read().uploadJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   createUploadJob(videoJobId: string, scheduledFor: string): UploadJob {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const created: UploadJob = {
         id: createId('upload'),
         videoJobId,
@@ -490,7 +541,7 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   completeUploadJob(uploadJobId: string): UploadJob | undefined {
-    return mutateSnapshot((snapshot) => {
+    return this.mutate((snapshot) => {
       const job = snapshot.uploadJobs.find((item) => item.id === uploadJobId);
       if (!job) return undefined;
 
@@ -510,16 +561,21 @@ class JsonProjectRepository implements ProjectRepository {
   }
 
   listPipelineEvents(limit = 50): PipelineEvent[] {
-    return [...readSnapshot().pipelineEvents]
+    return [...this.store.read().pipelineEvents]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, limit);
   }
 }
 
-const repository = new JsonProjectRepository();
+const defaultStore = new JsonFileSnapshotStore();
+const defaultRepository = new SnapshotProjectRepository(defaultStore);
+
+export function createProjectRepository(store: SnapshotStore = defaultStore): ProjectRepository {
+  return new SnapshotProjectRepository(store);
+}
 
 export function getProjectRepository(): ProjectRepository {
-  return repository;
+  return defaultRepository;
 }
 
 export function getDataFilePath() {
@@ -527,8 +583,12 @@ export function getDataFilePath() {
   return dataFile;
 }
 
+export function getSnapshotStoreLabel(): string {
+  return defaultStore.getLabel();
+}
+
 export function getProjectSnapshot(): ProjectSnapshot {
-  return repository.getSnapshot();
+  return defaultRepository.getSnapshot();
 }
 
 export function normalizeSourcePlatform(value: string | undefined | null): SourcePlatform {
@@ -640,81 +700,81 @@ export function validateTrendCandidateInputDetailed(input: CreateTrendCandidateI
 }
 
 export function listTrendCandidates(): TrendCandidate[] {
-  return repository.listTrendCandidates();
+  return defaultRepository.listTrendCandidates();
 }
 
 export function getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined {
-  return repository.getTrendCandidateById(trendCandidateId);
+  return defaultRepository.getTrendCandidateById(trendCandidateId);
 }
 
 export function createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
-  return repository.createTrendCandidate(input);
+  return defaultRepository.createTrendCandidate(input);
 }
 
 export function listQueuedTrendCandidates(): TrendCandidate[] {
-  return repository.listQueuedTrendCandidates();
+  return defaultRepository.listQueuedTrendCandidates();
 }
 
 export function updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined {
-  return repository.updateTrendCandidateStatus(trendCandidateId, status);
+  return defaultRepository.updateTrendCandidateStatus(trendCandidateId, status);
 }
 
 export function listSourceAssets(): SourceAsset[] {
-  return repository.listSourceAssets();
+  return defaultRepository.listSourceAssets();
 }
 
 export function listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
-  return repository.listSourceAssetsByTrendCandidate(trendCandidateId);
+  return defaultRepository.listSourceAssetsByTrendCandidate(trendCandidateId);
 }
 
 export function createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
-  return repository.createMockAnalysisArtifacts(trendCandidateId);
+  return defaultRepository.createMockAnalysisArtifacts(trendCandidateId);
 }
 
 export function listPromptDrafts(): PromptDraft[] {
-  return repository.listPromptDrafts();
+  return defaultRepository.listPromptDrafts();
 }
 
 export function listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[] {
-  return repository.listPromptDraftsByTrendCandidate(trendCandidateId);
+  return defaultRepository.listPromptDraftsByTrendCandidate(trendCandidateId);
 }
 
 export function getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
-  return repository.getPromptDraftById(promptDraftId);
+  return defaultRepository.getPromptDraftById(promptDraftId);
 }
 
 export function createMockPromptDraft(trendCandidateId: string): PromptDraft {
-  return repository.createMockPromptDraft(trendCandidateId);
+  return defaultRepository.createMockPromptDraft(trendCandidateId);
 }
 
 export function listVideoJobs(): VideoJob[] {
-  return repository.listVideoJobs();
+  return defaultRepository.listVideoJobs();
 }
 
 export function getVideoJobById(videoJobId: string): VideoJob | undefined {
-  return repository.getVideoJobById(videoJobId);
+  return defaultRepository.getVideoJobById(videoJobId);
 }
 
 export function createVideoJob(promptDraftId: string, provider = 'mock-sora-adapter'): VideoJob {
-  return repository.createVideoJob(promptDraftId, provider);
+  return defaultRepository.createVideoJob(promptDraftId, provider);
 }
 
 export function updateVideoJobResult(videoJobId: string, outputUrl: string, status: JobStatus = 'completed'): VideoJob | undefined {
-  return repository.updateVideoJobResult(videoJobId, outputUrl, status);
+  return defaultRepository.updateVideoJobResult(videoJobId, outputUrl, status);
 }
 
 export function listUploadJobs(): UploadJob[] {
-  return repository.listUploadJobs();
+  return defaultRepository.listUploadJobs();
 }
 
 export function createUploadJob(videoJobId: string, scheduledFor: string): UploadJob {
-  return repository.createUploadJob(videoJobId, scheduledFor);
+  return defaultRepository.createUploadJob(videoJobId, scheduledFor);
 }
 
 export function completeUploadJob(uploadJobId: string): UploadJob | undefined {
-  return repository.completeUploadJob(uploadJobId);
+  return defaultRepository.completeUploadJob(uploadJobId);
 }
 
 export function listPipelineEvents(limit?: number): PipelineEvent[] {
-  return repository.listPipelineEvents(limit);
+  return defaultRepository.listPipelineEvents(limit);
 }
