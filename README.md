@@ -29,4 +29,16 @@ It does **not** implement watermark removal, DRM bypass, or direct cloning of pr
 - Pluggable video generation providers
 
 ## Status
-Scaffolded on 2026-03-11.
+Phase 0 scaffold created on 2026-03-11.
+
+## Monorepo Layout
+- `apps/web` — Next.js app router web UI
+- `apps/worker` — TypeScript worker runtime
+- `packages/core` — shared types and schemas
+- `packages/providers` — provider interfaces and mock adapter
+
+## Commands
+- `pnpm dev:web`
+- `pnpm dev:worker`
+- `pnpm build`
+- `pnpm typecheck`

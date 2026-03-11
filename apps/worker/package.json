@@ -1,0 +1,21 @@
+{
+  "name": "@trend-to-video-studio/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "echo worker lint stub",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@trend-to-video-studio/core": "workspace:*",
+    "@trend-to-video-studio/providers": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "@types/node": "22.13.10"
+  }
+}

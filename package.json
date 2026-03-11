@@ -1,0 +1,12 @@
+{
+  "name": "trend-to-video-studio",
+  "private": true,
+  "packageManager": "pnpm@10.6.3",
+  "scripts": {
+    "dev:web": "pnpm --filter @trend-to-video-studio/web dev",
+    "dev:worker": "pnpm --filter @trend-to-video-studio/worker dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
