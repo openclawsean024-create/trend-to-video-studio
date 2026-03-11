@@ -1,5 +1,7 @@
 import {
   createMockAnalysisArtifacts,
+  createMockPromptDraft,
+  createVideoJob,
   listQueuedTrendCandidates,
   listSourceAssetsByTrendCandidate,
 } from '@trend-to-video-studio/core';
@@ -17,8 +19,14 @@ async function main() {
     const analysisArtifacts = createMockAnalysisArtifacts(candidate.id);
     console.log('Generated analysis artifacts:', analysisArtifacts);
 
+    const promptDraft = createMockPromptDraft(candidate.id);
+    console.log('Generated prompt draft:', promptDraft);
+
+    const queuedVideoJob = createVideoJob(promptDraft.id);
+    console.log('Queued video job:', queuedVideoJob);
+
     const result = await mockVideoProvider.generateVideo({
-      prompt: `Create an original short-form video concept inspired by ${candidate.topic}`,
+      prompt: promptDraft.videoPrompt,
     });
 
     console.log('Mock generation result:', result);
