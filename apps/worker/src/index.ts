@@ -1,4 +1,8 @@
-import { listQueuedTrendCandidates } from '@trend-to-video-studio/core';
+import {
+  createMockAnalysisArtifacts,
+  listQueuedTrendCandidates,
+  listSourceAssetsByTrendCandidate,
+} from '@trend-to-video-studio/core';
 import { mockVideoProvider } from '@trend-to-video-studio/providers';
 
 async function main() {
@@ -10,11 +14,15 @@ async function main() {
   for (const candidate of queuedCandidates) {
     console.log(`Processing candidate: ${candidate.topic} (${candidate.sourceUrl})`);
 
+    const analysisArtifacts = createMockAnalysisArtifacts(candidate.id);
+    console.log('Generated analysis artifacts:', analysisArtifacts);
+
     const result = await mockVideoProvider.generateVideo({
       prompt: `Create an original short-form video concept inspired by ${candidate.topic}`,
     });
 
     console.log('Mock generation result:', result);
+    console.log('Current asset count for candidate:', listSourceAssetsByTrendCandidate(candidate.id).length);
   }
 }
 

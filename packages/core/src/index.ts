@@ -92,23 +92,24 @@ export const exampleUploadJob: UploadJob = {
   status: 'draft',
 };
 
+const inMemoryTrendCandidates: TrendCandidate[] = [exampleTrendCandidate];
+const inMemorySourceAssets: SourceAsset[] = [
+  {
+    id: 'asset_001',
+    trendCandidateId: 'trend_001',
+    assetType: 'metadata',
+    uri: 'memory://trend_001/metadata.json',
+    createdAt: new Date('2026-03-11T10:02:00Z').toISOString(),
+  },
+];
+
 export const exampleSnapshot: ProjectSnapshot = {
   trendCandidates: [exampleTrendCandidate],
-  sourceAssets: [
-    {
-      id: 'asset_001',
-      trendCandidateId: 'trend_001',
-      assetType: 'metadata',
-      uri: 'memory://trend_001/metadata.json',
-      createdAt: new Date('2026-03-11T10:02:00Z').toISOString(),
-    },
-  ],
+  sourceAssets: [...inMemorySourceAssets],
   promptDrafts: [examplePromptDraft],
   videoJobs: [exampleVideoJob],
   uploadJobs: [exampleUploadJob],
 };
-
-const inMemoryTrendCandidates: TrendCandidate[] = [exampleTrendCandidate];
 
 export function listTrendCandidates(): TrendCandidate[] {
   return [...inMemoryTrendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
@@ -130,4 +131,35 @@ export function createTrendCandidate(input: CreateTrendCandidateInput): TrendCan
 
 export function listQueuedTrendCandidates(): TrendCandidate[] {
   return inMemoryTrendCandidates.filter((candidate) => candidate.status === 'queued');
+}
+
+export function listSourceAssets(): SourceAsset[] {
+  return [...inMemorySourceAssets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
+  return inMemorySourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
+}
+
+export function createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
+  const createdAt = new Date().toISOString();
+  const artifacts: SourceAsset[] = [
+    {
+      id: `asset_meta_${Date.now()}`,
+      trendCandidateId,
+      assetType: 'metadata',
+      uri: `memory://${trendCandidateId}/metadata.json`,
+      createdAt,
+    },
+    {
+      id: `asset_shot_${Date.now()}`,
+      trendCandidateId,
+      assetType: 'screenshot',
+      uri: `memory://${trendCandidateId}/shot-001.png`,
+      createdAt,
+    },
+  ];
+
+  inMemorySourceAssets.unshift(...artifacts);
+  return artifacts;
 }
