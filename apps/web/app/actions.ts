@@ -2,7 +2,7 @@
 
 import {
   completeUploadJob,
-  createMockPromptDraft,
+  createGeneratedPromptDraft,
   createSourceAssets,
   createTrendCandidate,
   createUploadJob,
@@ -76,7 +76,7 @@ export async function createPromptAction(formData: FormData) {
   if (!trendCandidateId) throw new Error('trendCandidateId is required');
   if (!getTrendCandidateById(trendCandidateId)) throw new Error('trendCandidateId does not exist');
 
-  createMockPromptDraft(trendCandidateId);
+  createGeneratedPromptDraft(trendCandidateId);
   revalidatePath('/');
 }
 

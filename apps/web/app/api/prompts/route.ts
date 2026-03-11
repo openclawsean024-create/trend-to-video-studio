@@ -1,7 +1,8 @@
 import {
-  createMockPromptDraft,
+  createGeneratedPromptDraft,
   getTrendCandidateById,
   listPromptDrafts,
+  listSourceAssetsByTrendCandidate,
 } from '@trend-to-video-studio/core';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -26,7 +27,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!getTrendCandidateById(trendCandidateId)) {
+  const candidate = getTrendCandidateById(trendCandidateId);
+  if (!candidate) {
     return NextResponse.json(
       {
         ok: false,
@@ -36,10 +38,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const draft = createMockPromptDraft(trendCandidateId);
+  const artifacts = listSourceAssetsByTrendCandidate(trendCandidateId);
+  if (artifacts.length === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'analysis artifacts are required before generating a prompt draft',
+      },
+      { status: 400 },
+    );
+  }
+
+  const draft = createGeneratedPromptDraft(trendCandidateId);
 
   return NextResponse.json({
     ok: true,
+    trendCandidate: candidate,
+    analysisArtifactCount: artifacts.length,
     item: draft,
   });
 }

@@ -39,8 +39,9 @@ Phase 4 operator workflow MVP in progress on 2026-03-11.
 - YouTube URL validation + normalization added for watch, shorts, and youtu.be formats
 - video provider registry added for generation routing
 - baseline analysis provider added for provider-based source analysis output
+- prompt drafts now generate from analysis artifact counts and types instead of fixed mock text
 - SQLite snapshot store support added behind env-selectable driver
-- next milestone: richer analysis adapters, real generation/upload integrations, and enabling native SQLite on host
+- next milestone: richer analysis adapters with extracted content summaries, real generation/upload integrations, and enabling native SQLite on host
 
 ## Monorepo Layout
 - `apps/web` — Next.js app router web UI

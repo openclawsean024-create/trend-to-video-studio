@@ -53,6 +53,13 @@ export type PromptDraft = {
   status: JobStatus;
 };
 
+export type CreatePromptDraftInput = {
+  trendCandidateId: string;
+  title: string;
+  videoPrompt: string;
+  thumbnailPrompt: string;
+};
+
 export type VideoJob = {
   id: string;
   promptDraftId: string;
@@ -407,6 +414,8 @@ export interface ProjectRepository {
   listPromptDrafts(): PromptDraft[];
   listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[];
   getPromptDraftById(promptDraftId: string): PromptDraft | undefined;
+  createPromptDraft(input: CreatePromptDraftInput): PromptDraft;
+  createGeneratedPromptDraft(trendCandidateId: string): PromptDraft;
   createMockPromptDraft(trendCandidateId: string): PromptDraft;
   listVideoJobs(): VideoJob[];
   getVideoJobById(videoJobId: string): VideoJob | undefined;
@@ -552,17 +561,14 @@ export class SnapshotProjectRepository implements ProjectRepository {
     return this.store.read().promptDrafts.find((draft) => draft.id === promptDraftId);
   }
 
-  createMockPromptDraft(trendCandidateId: string): PromptDraft {
+  createPromptDraft(input: CreatePromptDraftInput): PromptDraft {
     return this.mutate((snapshot) => {
-      const trendCandidate = snapshot.trendCandidates.find((candidate) => candidate.id === trendCandidateId);
-      const sourceAssets = snapshot.sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
-      const topic = trendCandidate?.topic ?? 'Untitled trend';
       const created: PromptDraft = {
         id: createId('prompt'),
-        trendCandidateId,
-        title: `${topic} Prompt Draft`,
-        videoPrompt: `Create an original short-form video inspired by ${topic}. Use ${sourceAssets.length} analyzed source assets as structural inspiration only, not as direct copies.`,
-        thumbnailPrompt: `Create a high-contrast thumbnail for ${topic} with a clear focal subject and bold text space.`,
+        trendCandidateId: input.trendCandidateId,
+        title: input.title.trim(),
+        videoPrompt: input.videoPrompt.trim(),
+        thumbnailPrompt: input.thumbnailPrompt.trim(),
         createdAt: new Date().toISOString(),
         status: 'draft',
       };
@@ -572,14 +578,40 @@ export class SnapshotProjectRepository implements ProjectRepository {
         type: 'prompt_draft_created',
         entityType: 'promptDraft',
         entityId: created.id,
-        message: `Prompt draft created for trend candidate ${trendCandidateId}`,
+        message: `Prompt draft created for trend candidate ${input.trendCandidateId}`,
         metadata: {
-          trendCandidateId,
+          trendCandidateId: input.trendCandidateId,
           title: created.title,
         },
       });
       return created;
     });
+  }
+
+  createGeneratedPromptDraft(trendCandidateId: string): PromptDraft {
+    const trendCandidate = this.getTrendCandidateById(trendCandidateId);
+    const sourceAssets = this.listSourceAssetsByTrendCandidate(trendCandidateId);
+    const topic = trendCandidate?.topic ?? 'Untitled trend';
+    const transcriptAssets = sourceAssets.filter((asset) => asset.assetType === 'transcript');
+    const screenshotAssets = sourceAssets.filter((asset) => asset.assetType === 'screenshot');
+    const metadataAssets = sourceAssets.filter((asset) => asset.assetType === 'metadata');
+
+    const narrativeSignals = [
+      transcriptAssets.length > 0 ? `${transcriptAssets.length} transcript-derived structure cue(s)` : 'no transcript cues yet',
+      screenshotAssets.length > 0 ? `${screenshotAssets.length} visual keyframe reference(s)` : 'no keyframe references yet',
+      metadataAssets.length > 0 ? `${metadataAssets.length} metadata summary artifact(s)` : 'no metadata summaries yet',
+    ].join(', ');
+
+    return this.createPromptDraft({
+      trendCandidateId,
+      title: `${topic} Prompt Draft`,
+      videoPrompt: `Create an original short-form video about ${topic}. Base the pacing, hook, and scene order on the available analysis artifacts (${narrativeSignals}). Preserve only reusable structure and topic framing from analysis; do not copy source wording, shots, branding, or creator identity. Deliver a 30-45 second video with a strong first-2-second hook, 3-5 escalating beats, and a decisive ending CTA or payoff.`,
+      thumbnailPrompt: `Design a thumbnail for ${topic} using the analyzed visual motifs from ${screenshotAssets.length} screenshot artifact(s) and ${metadataAssets.length} metadata artifact(s). Keep it original, bold, high-contrast, and readable on mobile, with one dominant focal subject and clear text-safe space.`,
+    });
+  }
+
+  createMockPromptDraft(trendCandidateId: string): PromptDraft {
+    return this.createGeneratedPromptDraft(trendCandidateId);
   }
 
   listVideoJobs(): VideoJob[] {
@@ -881,6 +913,14 @@ export function listPromptDraftsByTrendCandidate(trendCandidateId: string): Prom
 
 export function getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
   return defaultRepository.getPromptDraftById(promptDraftId);
+}
+
+export function createPromptDraft(input: CreatePromptDraftInput): PromptDraft {
+  return defaultRepository.createPromptDraft(input);
+}
+
+export function createGeneratedPromptDraft(trendCandidateId: string): PromptDraft {
+  return defaultRepository.createGeneratedPromptDraft(trendCandidateId);
 }
 
 export function createMockPromptDraft(trendCandidateId: string): PromptDraft {

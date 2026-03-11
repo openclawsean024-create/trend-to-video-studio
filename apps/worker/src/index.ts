@@ -1,6 +1,6 @@
 import {
   completeUploadJob,
-  createMockPromptDraft,
+  createGeneratedPromptDraft,
   createSourceAssets,
   createUploadJob,
   createVideoJob,
@@ -54,8 +54,8 @@ async function processCandidate(trendCandidateId: string, providerName = 'mock-s
   console.log('Analysis provider result:', analysisResult);
   console.log('Generated analysis artifacts:', analysisArtifacts);
 
-  const promptDraft = createMockPromptDraft(candidate.id);
-  console.log('Generated prompt draft:', promptDraft);
+  const promptDraft = createGeneratedPromptDraft(candidate.id);
+  console.log('Generated prompt draft from analysis artifacts:', promptDraft);
 
   const provider = getVideoProvider(providerName);
   const queuedVideoJob = createVideoJob(promptDraft.id, provider.name);

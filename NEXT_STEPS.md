@@ -25,4 +25,4 @@
 9. pipeline event history complete for operator debugging
 10. YouTube watch / shorts / youtu.be validation + normalization complete
 11. SQLite support added with JSON auto-migration path + env-selectable driver (kept non-default until native build is enabled on host)
-12. next focus: enable native SQLite build on host, then switch default driver; after that, real analysis adapter, real generation/upload integrations, and structured relational schema beyond snapshot-blob mode
+12. prompt drafts now derive from analysis artifact inventory; next focus: enrich analysis with extracted content summaries/transcript text, enable native SQLite build on host, then switch default driver; after that, real generation/upload integrations and structured relational schema beyond snapshot-blob mode
