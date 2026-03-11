@@ -9,6 +9,12 @@ export type TrendCandidate = {
   status: JobStatus;
 };
 
+export type CreateTrendCandidateInput = {
+  topic: string;
+  sourceUrl: string;
+  sourcePlatform: TrendCandidate['sourcePlatform'];
+};
+
 export type SourceAsset = {
   id: string;
   trendCandidateId: string;
@@ -54,7 +60,7 @@ export type ProjectSnapshot = {
 export const exampleTrendCandidate: TrendCandidate = {
   id: 'trend_001',
   topic: 'AI generated short-form storytelling',
-  sourceUrl: 'https://example.com/source',
+  sourceUrl: 'https://www.youtube.com/watch?v=example123',
   sourcePlatform: 'youtube',
   discoveredAt: new Date('2026-03-11T10:00:00Z').toISOString(),
   status: 'queued',
@@ -101,3 +107,27 @@ export const exampleSnapshot: ProjectSnapshot = {
   videoJobs: [exampleVideoJob],
   uploadJobs: [exampleUploadJob],
 };
+
+const inMemoryTrendCandidates: TrendCandidate[] = [exampleTrendCandidate];
+
+export function listTrendCandidates(): TrendCandidate[] {
+  return [...inMemoryTrendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+}
+
+export function createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
+  const created: TrendCandidate = {
+    id: `trend_${Date.now()}`,
+    topic: input.topic,
+    sourceUrl: input.sourceUrl,
+    sourcePlatform: input.sourcePlatform,
+    discoveredAt: new Date().toISOString(),
+    status: 'queued',
+  };
+
+  inMemoryTrendCandidates.unshift(created);
+  return created;
+}
+
+export function listQueuedTrendCandidates(): TrendCandidate[] {
+  return inMemoryTrendCandidates.filter((candidate) => candidate.status === 'queued');
+}

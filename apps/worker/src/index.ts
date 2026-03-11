@@ -1,31 +1,21 @@
-import {
-  examplePromptDraft,
-  exampleSnapshot,
-  exampleTrendCandidate,
-  exampleUploadJob,
-  exampleVideoJob,
-} from '@trend-to-video-studio/core';
+import { listQueuedTrendCandidates } from '@trend-to-video-studio/core';
 import { mockVideoProvider } from '@trend-to-video-studio/providers';
 
 async function main() {
   console.log('Trend to Video Studio worker booted');
-  console.log('Trend candidate:', exampleTrendCandidate.topic, '| status:', exampleTrendCandidate.status);
-  console.log('Prompt draft:', examplePromptDraft.title, '| status:', examplePromptDraft.status);
 
-  const result = await mockVideoProvider.generateVideo({
-    prompt: examplePromptDraft.videoPrompt,
-  });
+  const queuedCandidates = listQueuedTrendCandidates();
+  console.log(`Queued trend candidates: ${queuedCandidates.length}`);
 
-  console.log('Mock generation result:', result);
-  console.log('Video job:', exampleVideoJob.id, '| status:', exampleVideoJob.status);
-  console.log('Upload job scheduled for:', exampleUploadJob.scheduledFor);
-  console.log('Snapshot summary:', {
-    trendCandidates: exampleSnapshot.trendCandidates.length,
-    sourceAssets: exampleSnapshot.sourceAssets.length,
-    promptDrafts: exampleSnapshot.promptDrafts.length,
-    videoJobs: exampleSnapshot.videoJobs.length,
-    uploadJobs: exampleSnapshot.uploadJobs.length,
-  });
+  for (const candidate of queuedCandidates) {
+    console.log(`Processing candidate: ${candidate.topic} (${candidate.sourceUrl})`);
+
+    const result = await mockVideoProvider.generateVideo({
+      prompt: `Create an original short-form video concept inspired by ${candidate.topic}`,
+    });
+
+    console.log('Mock generation result:', result);
+  }
 }
 
 main().catch((error) => {
