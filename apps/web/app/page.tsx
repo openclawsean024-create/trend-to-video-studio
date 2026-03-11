@@ -1,10 +1,44 @@
 import {
+  getDataFilePath,
+  getProjectSnapshot,
   listPromptDrafts,
   listSourceAssets,
   listTrendCandidates,
   listUploadJobs,
   listVideoJobs,
 } from '@trend-to-video-studio/core';
+import {
+  createPromptAction,
+  createTrendCandidateAction,
+  createUploadJobAction,
+  createVideoJobAction,
+  runAnalysisAction,
+} from './actions';
+
+const sectionStyle = {
+  marginBottom: 24,
+  padding: 20,
+  border: '1px solid #e5e7eb',
+  borderRadius: 16,
+  background: '#fff',
+} satisfies React.CSSProperties;
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: 10,
+  border: '1px solid #d1d5db',
+  marginTop: 6,
+} satisfies React.CSSProperties;
+
+const buttonStyle = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: 'none',
+  background: '#111827',
+  color: '#fff',
+  cursor: 'pointer',
+} satisfies React.CSSProperties;
 
 export default function HomePage() {
   const trendCandidates = listTrendCandidates();
@@ -12,33 +46,145 @@ export default function HomePage() {
   const promptDrafts = listPromptDrafts();
   const videoJobs = listVideoJobs();
   const uploadJobs = listUploadJobs();
+  const snapshot = getProjectSnapshot();
 
   return (
-    <main style={{ fontFamily: 'Arial, sans-serif', padding: 32, lineHeight: 1.6 }}>
+    <main
+      style={{
+        fontFamily: 'Arial, sans-serif',
+        padding: 32,
+        lineHeight: 1.6,
+        maxWidth: 1180,
+        margin: '0 auto',
+        background: '#f8fafc',
+        minHeight: '100vh',
+      }}
+    >
       <h1>Trend to Video Studio</h1>
-      <p>Phase 6 YouTube scheduling draft is ready.</p>
+      <p>Operator dashboard for trend intake → analysis → prompts → video jobs → upload queue.</p>
 
-      <section>
-        <h2>Trend Candidates</h2>
-        <ul>
+      <section style={{ ...sectionStyle, background: '#eef2ff' }}>
+        <h2 style={{ marginTop: 0 }}>Project Snapshot</h2>
+        <div>Data file: <code>{getDataFilePath()}</code></div>
+        <div>Trend candidates: {snapshot.trendCandidates.length}</div>
+        <div>Source assets: {snapshot.sourceAssets.length}</div>
+        <div>Prompt drafts: {snapshot.promptDrafts.length}</div>
+        <div>Video jobs: {snapshot.videoJobs.length}</div>
+        <div>Upload jobs: {snapshot.uploadJobs.length}</div>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Create Trend Candidate</h2>
+        <form action={createTrendCandidateAction} style={{ display: 'grid', gap: 12 }}>
+          <label>
+            Topic
+            <input name="topic" placeholder="AI storytelling shorts" style={inputStyle} />
+          </label>
+          <label>
+            Source URL
+            <input name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." style={inputStyle} />
+          </label>
+          <label>
+            Source Platform
+            <select name="sourcePlatform" defaultValue="youtube" style={inputStyle}>
+              <option value="youtube">youtube</option>
+              <option value="shorts">shorts</option>
+              <option value="manual">manual</option>
+            </select>
+          </label>
+          <div>
+            <button type="submit" style={buttonStyle}>Add candidate</button>
+          </div>
+        </form>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Trend Candidates</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {trendCandidates.map((candidate) => (
-            <li key={candidate.id} style={{ marginBottom: 16 }}>
+            <li key={candidate.id} style={{ padding: 16, borderTop: '1px solid #e5e7eb' }}>
               <strong>{candidate.topic}</strong>
+              <div>ID: {candidate.id}</div>
               <div>Platform: {candidate.sourcePlatform}</div>
               <div>Status: {candidate.status}</div>
               <div>URL: {candidate.sourceUrl}</div>
               <div>Discovered: {candidate.discoveredAt}</div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                <form action={runAnalysisAction}>
+                  <input type="hidden" name="trendCandidateId" value={candidate.id} />
+                  <button type="submit" style={buttonStyle}>Run analysis</button>
+                </form>
+                <form action={createPromptAction}>
+                  <input type="hidden" name="trendCandidateId" value={candidate.id} />
+                  <button type="submit" style={buttonStyle}>Create prompt</button>
+                </form>
+              </div>
             </li>
           ))}
         </ul>
       </section>
 
-      <section>
-        <h2>Source Assets</h2>
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Prompt Drafts</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {promptDrafts.map((draft) => (
+            <li key={draft.id} style={{ padding: 16, borderTop: '1px solid #e5e7eb' }}>
+              <strong>{draft.title}</strong>
+              <div>ID: {draft.id}</div>
+              <div>Status: {draft.status}</div>
+              <div>Trend Candidate: {draft.trendCandidateId}</div>
+              <div>Video Prompt: {draft.videoPrompt}</div>
+              <div>Thumbnail Prompt: {draft.thumbnailPrompt}</div>
+
+              <form action={createVideoJobAction} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                <input type="hidden" name="promptDraftId" value={draft.id} />
+                <label>
+                  Override prompt (optional)
+                  <textarea name="prompt" rows={3} style={inputStyle} defaultValue={draft.videoPrompt} />
+                </label>
+                <div>
+                  <button type="submit" style={buttonStyle}>Generate mock video</button>
+                </div>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Video Jobs</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {videoJobs.map((job) => (
+            <li key={job.id} style={{ padding: 16, borderTop: '1px solid #e5e7eb' }}>
+              <strong>{job.id}</strong>
+              <div>Prompt Draft: {job.promptDraftId}</div>
+              <div>Provider: {job.provider}</div>
+              <div>Status: {job.status}</div>
+              <div>Output URL: {job.outputUrl ?? 'pending'}</div>
+
+              <form action={createUploadJobAction} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                <input type="hidden" name="videoJobId" value={job.id} />
+                <label>
+                  Schedule for (ISO, optional)
+                  <input name="scheduledFor" placeholder="2026-03-12T10:00:00.000Z" style={inputStyle} />
+                </label>
+                <div>
+                  <button type="submit" style={buttonStyle}>Queue upload</button>
+                </div>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Source Assets</h2>
         <ul>
           {sourceAssets.map((asset) => (
             <li key={asset.id} style={{ marginBottom: 12 }}>
               <strong>{asset.assetType}</strong>
+              <div>ID: {asset.id}</div>
               <div>Trend Candidate: {asset.trendCandidateId}</div>
               <div>URI: {asset.uri}</div>
               <div>Created: {asset.createdAt}</div>
@@ -47,38 +193,8 @@ export default function HomePage() {
         </ul>
       </section>
 
-      <section>
-        <h2>Prompt Drafts</h2>
-        <ul>
-          {promptDrafts.map((draft) => (
-            <li key={draft.id} style={{ marginBottom: 16 }}>
-              <strong>{draft.title}</strong>
-              <div>Status: {draft.status}</div>
-              <div>Trend Candidate: {draft.trendCandidateId}</div>
-              <div>Video Prompt: {draft.videoPrompt}</div>
-              <div>Thumbnail Prompt: {draft.thumbnailPrompt}</div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section>
-        <h2>Video Jobs</h2>
-        <ul>
-          {videoJobs.map((job) => (
-            <li key={job.id} style={{ marginBottom: 12 }}>
-              <strong>{job.id}</strong>
-              <div>Prompt Draft: {job.promptDraftId}</div>
-              <div>Provider: {job.provider}</div>
-              <div>Status: {job.status}</div>
-              <div>Output URL: {job.outputUrl ?? 'pending'}</div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section>
-        <h2>Upload Jobs</h2>
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Upload Jobs</h2>
         <ul>
           {uploadJobs.map((job) => (
             <li key={job.id} style={{ marginBottom: 12 }}>
@@ -90,20 +206,6 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section>
-        <h2>API Notes</h2>
-        <p>Use <code>GET /api/trend-candidates</code> to list items.</p>
-        <p>Use <code>POST /api/trend-candidates</code> to add a candidate.</p>
-        <p>Use <code>GET /api/analysis</code> to list source assets.</p>
-        <p>Use <code>POST /api/analysis</code> with <code>{'{ trendCandidateId }'}</code> to create mock analysis artifacts.</p>
-        <p>Use <code>GET /api/prompts</code> to list prompt drafts.</p>
-        <p>Use <code>POST /api/prompts</code> with <code>{'{ trendCandidateId }'}</code> to create a prompt draft.</p>
-        <p>Use <code>GET /api/video-jobs</code> to list video jobs.</p>
-        <p>Use <code>POST /api/video-jobs</code> with <code>{'{ promptDraftId, prompt? }'}</code> to create and complete a mock video job.</p>
-        <p>Use <code>GET /api/upload-jobs</code> to list upload jobs.</p>
-        <p>Use <code>POST /api/upload-jobs</code> with <code>{'{ videoJobId, scheduledFor? }'}</code> to create and complete a mock upload job.</p>
       </section>
     </main>
   );

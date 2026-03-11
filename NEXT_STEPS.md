@@ -1,22 +1,22 @@
 # Next Steps
 
 ## Immediate
-- confirm project name
-- choose storage: Supabase vs local SQLite first
-- choose first trend source: YouTube only vs multi-source
-- choose first video provider integration
+- add dashboard forms/actions for creating candidates and triggering pipeline steps
+- add worker command modes: process-all / process-one / dry-run
+- add repository abstraction so local JSON can later swap to SQLite or Supabase
+- add validation helpers for source URLs and scheduled timestamps
 
 ## Recommended MVP choices
 - Name: trend-to-video-studio
-- Storage: SQLite first, abstract repository layer
-- Sources: YouTube only
+- Storage: local JSON now, repository abstraction next, SQLite after that
+- Sources: YouTube first
 - Generation: provider adapter stub first, real backend second
 - Upload: YouTube scheduling first
 
-## First implementation tasks
-1. create monorepo app scaffold
-2. define schemas for TrendCandidate / ContentJob / UploadJob
-3. implement trend URL intake endpoint
-4. implement screenshot extraction worker
-5. implement prompt generation templates
-6. implement YouTube upload config flow
+## Current status
+1. monorepo scaffold complete
+2. schemas for TrendCandidate / PromptDraft / VideoJob / UploadJob complete
+3. trend URL intake endpoint complete
+4. analysis / prompt / video / upload mock pipeline complete
+5. shared persistent snapshot storage complete
+6. next focus: usable operator dashboard + commandable worker

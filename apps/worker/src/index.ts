@@ -6,6 +6,7 @@ import {
   createVideoJob,
   listQueuedTrendCandidates,
   listSourceAssetsByTrendCandidate,
+  updateTrendCandidateStatus,
   updateVideoJobResult,
 } from '@trend-to-video-studio/core';
 import { mockVideoProvider } from '@trend-to-video-studio/providers';
@@ -18,6 +19,7 @@ async function main() {
 
   for (const candidate of queuedCandidates) {
     console.log(`Processing candidate: ${candidate.topic} (${candidate.sourceUrl})`);
+    updateTrendCandidateStatus(candidate.id, 'processing');
 
     const analysisArtifacts = createMockAnalysisArtifacts(candidate.id);
     console.log('Generated analysis artifacts:', analysisArtifacts);
@@ -43,6 +45,7 @@ async function main() {
       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     );
     const completedUploadJob = completeUploadJob(uploadJob.id);
+    updateTrendCandidateStatus(candidate.id, 'completed');
 
     console.log('Mock generation result:', result);
     console.log('Completed video job:', completedVideoJob);
