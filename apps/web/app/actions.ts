@@ -14,7 +14,7 @@ import {
   normalizeSourcePlatform,
   updateTrendCandidateStatus,
   updateVideoJobResult,
-  validateTrendCandidateInput,
+  validateTrendCandidateInputDetailed,
 } from '@trend-to-video-studio/core';
 import { mockVideoProvider } from '@trend-to-video-studio/providers';
 import { revalidatePath } from 'next/cache';
@@ -30,12 +30,16 @@ export async function createTrendCandidateAction(formData: FormData) {
     sourcePlatform: normalizeSourcePlatform(asString(formData.get('sourcePlatform'))),
   };
 
-  const errors = validateTrendCandidateInput(input);
-  if (errors.length > 0) {
-    throw new Error(errors.join('; '));
+  const validation = validateTrendCandidateInputDetailed(input);
+  if (validation.errors.length > 0) {
+    throw new Error(validation.errors.join('; '));
   }
 
-  createTrendCandidate(input);
+  createTrendCandidate({
+    ...input,
+    sourceUrl: validation.normalizedSourceUrl,
+    sourcePlatform: validation.inferredSourcePlatform,
+  });
   revalidatePath('/');
 }
 

@@ -1,6 +1,7 @@
 import {
   getDataFilePath,
   getProjectSnapshot,
+  listPipelineEvents,
   listPromptDrafts,
   listSourceAssets,
   listTrendCandidates,
@@ -46,6 +47,7 @@ export default function HomePage() {
   const promptDrafts = listPromptDrafts();
   const videoJobs = listVideoJobs();
   const uploadJobs = listUploadJobs();
+  const pipelineEvents = listPipelineEvents(15);
   const snapshot = getProjectSnapshot();
 
   return (
@@ -71,6 +73,7 @@ export default function HomePage() {
         <div>Prompt drafts: {snapshot.promptDrafts.length}</div>
         <div>Video jobs: {snapshot.videoJobs.length}</div>
         <div>Upload jobs: {snapshot.uploadJobs.length}</div>
+        <div>Pipeline events: {snapshot.pipelineEvents.length}</div>
       </section>
 
       <section style={sectionStyle}>
@@ -108,6 +111,9 @@ export default function HomePage() {
               <div>Platform: {candidate.sourcePlatform}</div>
               <div>Status: {candidate.status}</div>
               <div>URL: {candidate.sourceUrl}</div>
+              {candidate.sourcePlatform !== 'manual' ? (
+                <div style={{ fontSize: 13, color: '#475569' }}>Expected input: YouTube watch / shorts / youtu.be URL</div>
+              ) : null}
               <div>Discovered: {candidate.discoveredAt}</div>
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
@@ -203,6 +209,36 @@ export default function HomePage() {
               <div>Platform: {job.platform}</div>
               <div>Status: {job.status}</div>
               <div>Scheduled For: {job.scheduledFor}</div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={{ marginTop: 0 }}>Pipeline Events</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {pipelineEvents.map((event) => (
+            <li key={event.id} style={{ padding: 16, borderTop: '1px solid #e5e7eb' }}>
+              <strong>{event.type}</strong>
+              <div>ID: {event.id}</div>
+              <div>Entity: {event.entityType} / {event.entityId}</div>
+              <div>Message: {event.message}</div>
+              <div>Created: {event.createdAt}</div>
+              {event.metadata ? (
+                <pre
+                  style={{
+                    marginTop: 10,
+                    padding: 12,
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    borderRadius: 12,
+                    overflowX: 'auto',
+                    fontSize: 12,
+                  }}
+                >
+                  {JSON.stringify(event.metadata, null, 2)}
+                </pre>
+              ) : null}
             </li>
           ))}
         </ul>

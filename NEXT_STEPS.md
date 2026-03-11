@@ -21,4 +21,7 @@
 5. shared persistent snapshot storage complete
 6. operator dashboard actions complete
 7. worker CLI modes complete
-8. next focus: repository abstraction + richer validation + real integrations
+8. repository abstraction baseline complete via ProjectRepository + JSON implementation
+9. pipeline event history complete for operator debugging
+10. YouTube watch / shorts / youtu.be validation + normalization complete
+11. next focus: SQLite repository swap, real analysis adapter, real generation/upload integrations

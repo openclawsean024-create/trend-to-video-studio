@@ -3,6 +3,15 @@ import { dirname, resolve } from 'node:path';
 
 export type JobStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type SourcePlatform = 'youtube' | 'shorts' | 'manual';
+export type PipelineEventType =
+  | 'trend_candidate_created'
+  | 'trend_candidate_status_updated'
+  | 'analysis_artifacts_created'
+  | 'prompt_draft_created'
+  | 'video_job_created'
+  | 'video_job_updated'
+  | 'upload_job_created'
+  | 'upload_job_completed';
 
 export type TrendCandidate = {
   id: string;
@@ -55,12 +64,37 @@ export type UploadJob = {
   status: JobStatus;
 };
 
+export type PipelineEvent = {
+  id: string;
+  type: PipelineEventType;
+  entityType: 'trendCandidate' | 'sourceAsset' | 'promptDraft' | 'videoJob' | 'uploadJob' | 'system';
+  entityId: string;
+  message: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type ProjectSnapshot = {
   trendCandidates: TrendCandidate[];
   sourceAssets: SourceAsset[];
   promptDrafts: PromptDraft[];
   videoJobs: VideoJob[];
   uploadJobs: UploadJob[];
+  pipelineEvents: PipelineEvent[];
+};
+
+export type YouTubeUrlDetails = {
+  kind: 'watch' | 'shorts' | 'youtu.be';
+  normalizedUrl: string;
+  inferredPlatform: Extract<SourcePlatform, 'youtube' | 'shorts'>;
+  videoId: string;
+};
+
+export type TrendCandidateValidationResult = {
+  errors: string[];
+  normalizedSourceUrl: string;
+  inferredSourcePlatform: SourcePlatform;
+  youtube?: YouTubeUrlDetails;
 };
 
 const DEFAULT_DATA_FILE = resolve(process.cwd(), '.data', 'project-snapshot.json');
@@ -119,6 +153,20 @@ const initialSnapshot: ProjectSnapshot = {
   promptDrafts: [examplePromptDraft],
   videoJobs: [exampleVideoJob],
   uploadJobs: [exampleUploadJob],
+  pipelineEvents: [
+    {
+      id: 'event_001',
+      type: 'trend_candidate_created',
+      entityType: 'trendCandidate',
+      entityId: 'trend_001',
+      message: 'Seed trend candidate created',
+      createdAt: new Date('2026-03-11T10:00:00Z').toISOString(),
+      metadata: {
+        topic: exampleTrendCandidate.topic,
+        sourcePlatform: exampleTrendCandidate.sourcePlatform,
+      },
+    },
+  ],
 };
 
 function ensureDataFile() {
@@ -132,20 +180,24 @@ function ensureDataFile() {
   }
 }
 
+function normalizeSnapshot(parsed: Partial<ProjectSnapshot>): ProjectSnapshot {
+  return {
+    trendCandidates: parsed.trendCandidates ?? [],
+    sourceAssets: parsed.sourceAssets ?? [],
+    promptDrafts: parsed.promptDrafts ?? [],
+    videoJobs: parsed.videoJobs ?? [],
+    uploadJobs: parsed.uploadJobs ?? [],
+    pipelineEvents: parsed.pipelineEvents ?? [],
+  };
+}
+
 function readSnapshot(): ProjectSnapshot {
   ensureDataFile();
 
   try {
     const raw = readFileSync(dataFile, 'utf8');
     const parsed = JSON.parse(raw) as Partial<ProjectSnapshot>;
-
-    return {
-      trendCandidates: parsed.trendCandidates ?? [],
-      sourceAssets: parsed.sourceAssets ?? [],
-      promptDrafts: parsed.promptDrafts ?? [],
-      videoJobs: parsed.videoJobs ?? [],
-      uploadJobs: parsed.uploadJobs ?? [],
-    };
+    return normalizeSnapshot(parsed);
   } catch {
     writeSnapshot(initialSnapshot);
     return structuredClone(initialSnapshot);
@@ -168,13 +220,315 @@ function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function recordEvent(
+  snapshot: ProjectSnapshot,
+  event: Omit<PipelineEvent, 'id' | 'createdAt'> & { createdAt?: string },
+): PipelineEvent {
+  const created: PipelineEvent = {
+    id: createId('event'),
+    createdAt: event.createdAt ?? new Date().toISOString(),
+    ...event,
+  };
+
+  snapshot.pipelineEvents.unshift(created);
+  return created;
+}
+
+export interface ProjectRepository {
+  getSnapshot(): ProjectSnapshot;
+  listTrendCandidates(): TrendCandidate[];
+  getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined;
+  createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate;
+  listQueuedTrendCandidates(): TrendCandidate[];
+  updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined;
+  listSourceAssets(): SourceAsset[];
+  listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[];
+  createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[];
+  listPromptDrafts(): PromptDraft[];
+  listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[];
+  getPromptDraftById(promptDraftId: string): PromptDraft | undefined;
+  createMockPromptDraft(trendCandidateId: string): PromptDraft;
+  listVideoJobs(): VideoJob[];
+  getVideoJobById(videoJobId: string): VideoJob | undefined;
+  createVideoJob(promptDraftId: string, provider?: string): VideoJob;
+  updateVideoJobResult(videoJobId: string, outputUrl: string, status?: JobStatus): VideoJob | undefined;
+  listUploadJobs(): UploadJob[];
+  createUploadJob(videoJobId: string, scheduledFor: string): UploadJob;
+  completeUploadJob(uploadJobId: string): UploadJob | undefined;
+  listPipelineEvents(limit?: number): PipelineEvent[];
+}
+
+class JsonProjectRepository implements ProjectRepository {
+  getSnapshot(): ProjectSnapshot {
+    return readSnapshot();
+  }
+
+  listTrendCandidates(): TrendCandidate[] {
+    return [...readSnapshot().trendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+  }
+
+  getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined {
+    return readSnapshot().trendCandidates.find((item) => item.id === trendCandidateId);
+  }
+
+  createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
+    return mutateSnapshot((snapshot) => {
+      const created: TrendCandidate = {
+        id: createId('trend'),
+        topic: input.topic.trim(),
+        sourceUrl: input.sourceUrl.trim(),
+        sourcePlatform: input.sourcePlatform,
+        discoveredAt: new Date().toISOString(),
+        status: 'queued',
+      };
+
+      snapshot.trendCandidates.unshift(created);
+      recordEvent(snapshot, {
+        type: 'trend_candidate_created',
+        entityType: 'trendCandidate',
+        entityId: created.id,
+        message: `Trend candidate created for ${created.topic}`,
+        metadata: {
+          topic: created.topic,
+          sourceUrl: created.sourceUrl,
+          sourcePlatform: created.sourcePlatform,
+        },
+      });
+      return created;
+    });
+  }
+
+  listQueuedTrendCandidates(): TrendCandidate[] {
+    return readSnapshot().trendCandidates.filter((candidate) => candidate.status === 'queued');
+  }
+
+  updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined {
+    return mutateSnapshot((snapshot) => {
+      const candidate = snapshot.trendCandidates.find((item) => item.id === trendCandidateId);
+      if (!candidate) return undefined;
+      candidate.status = status;
+      recordEvent(snapshot, {
+        type: 'trend_candidate_status_updated',
+        entityType: 'trendCandidate',
+        entityId: candidate.id,
+        message: `Trend candidate status updated to ${status}`,
+        metadata: { status },
+      });
+      return candidate;
+    });
+  }
+
+  listSourceAssets(): SourceAsset[] {
+    return [...readSnapshot().sourceAssets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
+    return readSnapshot().sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
+  }
+
+  createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
+    return mutateSnapshot((snapshot) => {
+      const createdAt = new Date().toISOString();
+      const artifacts: SourceAsset[] = [
+        {
+          id: createId('asset_meta'),
+          trendCandidateId,
+          assetType: 'metadata',
+          uri: `memory://${trendCandidateId}/metadata.json`,
+          createdAt,
+        },
+        {
+          id: createId('asset_shot'),
+          trendCandidateId,
+          assetType: 'screenshot',
+          uri: `memory://${trendCandidateId}/shot-001.png`,
+          createdAt,
+        },
+      ];
+
+      snapshot.sourceAssets.unshift(...artifacts);
+      recordEvent(snapshot, {
+        type: 'analysis_artifacts_created',
+        entityType: 'sourceAsset',
+        entityId: trendCandidateId,
+        message: `Created ${artifacts.length} analysis artifacts`,
+        metadata: {
+          trendCandidateId,
+          assetIds: artifacts.map((asset) => asset.id),
+          assetTypes: artifacts.map((asset) => asset.assetType),
+        },
+      });
+      return artifacts;
+    });
+  }
+
+  listPromptDrafts(): PromptDraft[] {
+    return [...readSnapshot().promptDrafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[] {
+    return readSnapshot().promptDrafts.filter((draft) => draft.trendCandidateId === trendCandidateId);
+  }
+
+  getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
+    return readSnapshot().promptDrafts.find((draft) => draft.id === promptDraftId);
+  }
+
+  createMockPromptDraft(trendCandidateId: string): PromptDraft {
+    return mutateSnapshot((snapshot) => {
+      const trendCandidate = snapshot.trendCandidates.find((candidate) => candidate.id === trendCandidateId);
+      const sourceAssets = snapshot.sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
+      const topic = trendCandidate?.topic ?? 'Untitled trend';
+      const created: PromptDraft = {
+        id: createId('prompt'),
+        trendCandidateId,
+        title: `${topic} Prompt Draft`,
+        videoPrompt: `Create an original short-form video inspired by ${topic}. Use ${sourceAssets.length} analyzed source assets as structural inspiration only, not as direct copies.`,
+        thumbnailPrompt: `Create a high-contrast thumbnail for ${topic} with a clear focal subject and bold text space.`,
+        createdAt: new Date().toISOString(),
+        status: 'draft',
+      };
+
+      snapshot.promptDrafts.unshift(created);
+      recordEvent(snapshot, {
+        type: 'prompt_draft_created',
+        entityType: 'promptDraft',
+        entityId: created.id,
+        message: `Prompt draft created for trend candidate ${trendCandidateId}`,
+        metadata: {
+          trendCandidateId,
+          title: created.title,
+        },
+      });
+      return created;
+    });
+  }
+
+  listVideoJobs(): VideoJob[] {
+    return [...readSnapshot().videoJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  getVideoJobById(videoJobId: string): VideoJob | undefined {
+    return readSnapshot().videoJobs.find((job) => job.id === videoJobId);
+  }
+
+  createVideoJob(promptDraftId: string, provider = 'mock-sora-adapter'): VideoJob {
+    return mutateSnapshot((snapshot) => {
+      const created: VideoJob = {
+        id: createId('video'),
+        promptDraftId,
+        provider,
+        status: 'queued',
+        createdAt: new Date().toISOString(),
+      };
+
+      snapshot.videoJobs.unshift(created);
+      recordEvent(snapshot, {
+        type: 'video_job_created',
+        entityType: 'videoJob',
+        entityId: created.id,
+        message: `Video job created with provider ${provider}`,
+        metadata: {
+          promptDraftId,
+          provider,
+        },
+      });
+      return created;
+    });
+  }
+
+  updateVideoJobResult(videoJobId: string, outputUrl: string, status: JobStatus = 'completed'): VideoJob | undefined {
+    return mutateSnapshot((snapshot) => {
+      const job = snapshot.videoJobs.find((item) => item.id === videoJobId);
+      if (!job) return undefined;
+
+      job.outputUrl = outputUrl;
+      job.status = status;
+      recordEvent(snapshot, {
+        type: 'video_job_updated',
+        entityType: 'videoJob',
+        entityId: job.id,
+        message: `Video job updated to ${status}`,
+        metadata: {
+          outputUrl,
+          status,
+        },
+      });
+      return job;
+    });
+  }
+
+  listUploadJobs(): UploadJob[] {
+    return [...readSnapshot().uploadJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  createUploadJob(videoJobId: string, scheduledFor: string): UploadJob {
+    return mutateSnapshot((snapshot) => {
+      const created: UploadJob = {
+        id: createId('upload'),
+        videoJobId,
+        platform: 'youtube',
+        scheduledFor,
+        createdAt: new Date().toISOString(),
+        status: 'queued',
+      };
+
+      snapshot.uploadJobs.unshift(created);
+      recordEvent(snapshot, {
+        type: 'upload_job_created',
+        entityType: 'uploadJob',
+        entityId: created.id,
+        message: 'Upload job created',
+        metadata: {
+          videoJobId,
+          scheduledFor,
+          platform: created.platform,
+        },
+      });
+      return created;
+    });
+  }
+
+  completeUploadJob(uploadJobId: string): UploadJob | undefined {
+    return mutateSnapshot((snapshot) => {
+      const job = snapshot.uploadJobs.find((item) => item.id === uploadJobId);
+      if (!job) return undefined;
+
+      job.status = 'completed';
+      recordEvent(snapshot, {
+        type: 'upload_job_completed',
+        entityType: 'uploadJob',
+        entityId: job.id,
+        message: 'Upload job marked completed',
+        metadata: {
+          status: job.status,
+          videoJobId: job.videoJobId,
+        },
+      });
+      return job;
+    });
+  }
+
+  listPipelineEvents(limit = 50): PipelineEvent[] {
+    return [...readSnapshot().pipelineEvents]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+}
+
+const repository = new JsonProjectRepository();
+
+export function getProjectRepository(): ProjectRepository {
+  return repository;
+}
+
 export function getDataFilePath() {
   ensureDataFile();
   return dataFile;
 }
 
 export function getProjectSnapshot(): ProjectSnapshot {
-  return readSnapshot();
+  return repository.getSnapshot();
 }
 
 export function normalizeSourcePlatform(value: string | undefined | null): SourcePlatform {
@@ -198,184 +552,169 @@ export function isValidIsoDateTime(value: string): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
 }
 
-export function validateTrendCandidateInput(input: CreateTrendCandidateInput): string[] {
-  const errors: string[] = [];
+export function parseYouTubeUrl(value: string): YouTubeUrlDetails | undefined {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const path = url.pathname;
 
-  if (!input.topic.trim()) {
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (path === '/watch') {
+        const videoId = url.searchParams.get('v')?.trim();
+        if (!videoId) return undefined;
+        return {
+          kind: 'watch',
+          normalizedUrl: `https://www.youtube.com/watch?v=${videoId}`,
+          inferredPlatform: 'youtube',
+          videoId,
+        };
+      }
+
+      if (path.startsWith('/shorts/')) {
+        const videoId = path.split('/')[2]?.trim();
+        if (!videoId) return undefined;
+        return {
+          kind: 'shorts',
+          normalizedUrl: `https://www.youtube.com/shorts/${videoId}`,
+          inferredPlatform: 'shorts',
+          videoId,
+        };
+      }
+    }
+
+    if (host === 'youtu.be') {
+      const videoId = path.replace(/^\//, '').split('/')[0]?.trim();
+      if (!videoId) return undefined;
+      return {
+        kind: 'youtu.be',
+        normalizedUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        inferredPlatform: 'youtube',
+        videoId,
+      };
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function validateTrendCandidateInput(input: CreateTrendCandidateInput): string[] {
+  return validateTrendCandidateInputDetailed(input).errors;
+}
+
+export function validateTrendCandidateInputDetailed(input: CreateTrendCandidateInput): TrendCandidateValidationResult {
+  const errors: string[] = [];
+  const topic = input.topic.trim();
+  const sourceUrl = input.sourceUrl.trim();
+  let normalizedSourceUrl = sourceUrl;
+  let inferredSourcePlatform = input.sourcePlatform;
+  let youtube: YouTubeUrlDetails | undefined;
+
+  if (!topic) {
     errors.push('topic is required');
   }
 
-  if (!input.sourceUrl.trim()) {
+  if (!sourceUrl) {
     errors.push('sourceUrl is required');
-  } else if (!isValidUrl(input.sourceUrl)) {
+  } else if (!isValidUrl(sourceUrl)) {
     errors.push('sourceUrl must be a valid http or https URL');
+  } else if (input.sourcePlatform === 'manual') {
+    normalizedSourceUrl = sourceUrl;
+  } else {
+    youtube = parseYouTubeUrl(sourceUrl);
+    if (!youtube) {
+      errors.push('sourceUrl must be a supported YouTube watch, shorts, or youtu.be URL');
+    } else {
+      normalizedSourceUrl = youtube.normalizedUrl;
+      inferredSourcePlatform = youtube.inferredPlatform;
+    }
   }
 
-  return errors;
+  return {
+    errors,
+    normalizedSourceUrl,
+    inferredSourcePlatform,
+    youtube,
+  };
 }
 
 export function listTrendCandidates(): TrendCandidate[] {
-  return [...readSnapshot().trendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+  return repository.listTrendCandidates();
 }
 
 export function getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined {
-  return readSnapshot().trendCandidates.find((item) => item.id === trendCandidateId);
+  return repository.getTrendCandidateById(trendCandidateId);
 }
 
 export function createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
-  return mutateSnapshot((snapshot) => {
-    const created: TrendCandidate = {
-      id: createId('trend'),
-      topic: input.topic.trim(),
-      sourceUrl: input.sourceUrl.trim(),
-      sourcePlatform: input.sourcePlatform,
-      discoveredAt: new Date().toISOString(),
-      status: 'queued',
-    };
-
-    snapshot.trendCandidates.unshift(created);
-    return created;
-  });
+  return repository.createTrendCandidate(input);
 }
 
 export function listQueuedTrendCandidates(): TrendCandidate[] {
-  return readSnapshot().trendCandidates.filter((candidate) => candidate.status === 'queued');
+  return repository.listQueuedTrendCandidates();
 }
 
 export function updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined {
-  return mutateSnapshot((snapshot) => {
-    const candidate = snapshot.trendCandidates.find((item) => item.id === trendCandidateId);
-    if (!candidate) return undefined;
-    candidate.status = status;
-    return candidate;
-  });
+  return repository.updateTrendCandidateStatus(trendCandidateId, status);
 }
 
 export function listSourceAssets(): SourceAsset[] {
-  return [...readSnapshot().sourceAssets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return repository.listSourceAssets();
 }
 
 export function listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
-  return readSnapshot().sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
+  return repository.listSourceAssetsByTrendCandidate(trendCandidateId);
 }
 
 export function createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
-  return mutateSnapshot((snapshot) => {
-    const createdAt = new Date().toISOString();
-    const artifacts: SourceAsset[] = [
-      {
-        id: createId('asset_meta'),
-        trendCandidateId,
-        assetType: 'metadata',
-        uri: `memory://${trendCandidateId}/metadata.json`,
-        createdAt,
-      },
-      {
-        id: createId('asset_shot'),
-        trendCandidateId,
-        assetType: 'screenshot',
-        uri: `memory://${trendCandidateId}/shot-001.png`,
-        createdAt,
-      },
-    ];
-
-    snapshot.sourceAssets.unshift(...artifacts);
-    return artifacts;
-  });
+  return repository.createMockAnalysisArtifacts(trendCandidateId);
 }
 
 export function listPromptDrafts(): PromptDraft[] {
-  return [...readSnapshot().promptDrafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return repository.listPromptDrafts();
 }
 
 export function listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[] {
-  return readSnapshot().promptDrafts.filter((draft) => draft.trendCandidateId === trendCandidateId);
+  return repository.listPromptDraftsByTrendCandidate(trendCandidateId);
 }
 
 export function getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
-  return readSnapshot().promptDrafts.find((draft) => draft.id === promptDraftId);
+  return repository.getPromptDraftById(promptDraftId);
 }
 
 export function createMockPromptDraft(trendCandidateId: string): PromptDraft {
-  return mutateSnapshot((snapshot) => {
-    const trendCandidate = snapshot.trendCandidates.find((candidate) => candidate.id === trendCandidateId);
-    const sourceAssets = snapshot.sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
-    const topic = trendCandidate?.topic ?? 'Untitled trend';
-    const created: PromptDraft = {
-      id: createId('prompt'),
-      trendCandidateId,
-      title: `${topic} Prompt Draft`,
-      videoPrompt: `Create an original short-form video inspired by ${topic}. Use ${sourceAssets.length} analyzed source assets as structural inspiration only, not as direct copies.`,
-      thumbnailPrompt: `Create a high-contrast thumbnail for ${topic} with a clear focal subject and bold text space.`,
-      createdAt: new Date().toISOString(),
-      status: 'draft',
-    };
-
-    snapshot.promptDrafts.unshift(created);
-    return created;
-  });
+  return repository.createMockPromptDraft(trendCandidateId);
 }
 
 export function listVideoJobs(): VideoJob[] {
-  return [...readSnapshot().videoJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return repository.listVideoJobs();
 }
 
 export function getVideoJobById(videoJobId: string): VideoJob | undefined {
-  return readSnapshot().videoJobs.find((job) => job.id === videoJobId);
+  return repository.getVideoJobById(videoJobId);
 }
 
 export function createVideoJob(promptDraftId: string, provider = 'mock-sora-adapter'): VideoJob {
-  return mutateSnapshot((snapshot) => {
-    const created: VideoJob = {
-      id: createId('video'),
-      promptDraftId,
-      provider,
-      status: 'queued',
-      createdAt: new Date().toISOString(),
-    };
-
-    snapshot.videoJobs.unshift(created);
-    return created;
-  });
+  return repository.createVideoJob(promptDraftId, provider);
 }
 
 export function updateVideoJobResult(videoJobId: string, outputUrl: string, status: JobStatus = 'completed'): VideoJob | undefined {
-  return mutateSnapshot((snapshot) => {
-    const job = snapshot.videoJobs.find((item) => item.id === videoJobId);
-    if (!job) return undefined;
-
-    job.outputUrl = outputUrl;
-    job.status = status;
-    return job;
-  });
+  return repository.updateVideoJobResult(videoJobId, outputUrl, status);
 }
 
 export function listUploadJobs(): UploadJob[] {
-  return [...readSnapshot().uploadJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return repository.listUploadJobs();
 }
 
 export function createUploadJob(videoJobId: string, scheduledFor: string): UploadJob {
-  return mutateSnapshot((snapshot) => {
-    const created: UploadJob = {
-      id: createId('upload'),
-      videoJobId,
-      platform: 'youtube',
-      scheduledFor,
-      createdAt: new Date().toISOString(),
-      status: 'queued',
-    };
-
-    snapshot.uploadJobs.unshift(created);
-    return created;
-  });
+  return repository.createUploadJob(videoJobId, scheduledFor);
 }
 
 export function completeUploadJob(uploadJobId: string): UploadJob | undefined {
-  return mutateSnapshot((snapshot) => {
-    const job = snapshot.uploadJobs.find((item) => item.id === uploadJobId);
-    if (!job) return undefined;
+  return repository.completeUploadJob(uploadJobId);
+}
 
-    job.status = 'completed';
-    return job;
-  });
+export function listPipelineEvents(limit?: number): PipelineEvent[] {
+  return repository.listPipelineEvents(limit);
 }

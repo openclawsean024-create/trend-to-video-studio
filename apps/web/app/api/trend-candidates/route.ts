@@ -2,7 +2,7 @@ import {
   createTrendCandidate,
   listTrendCandidates,
   normalizeSourcePlatform,
-  validateTrendCandidateInput,
+  validateTrendCandidateInputDetailed,
 } from '@trend-to-video-studio/core';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -22,21 +22,30 @@ export async function POST(request: NextRequest) {
     sourcePlatform: normalizeSourcePlatform(body?.sourcePlatform),
   };
 
-  const errors = validateTrendCandidateInput(input);
-  if (errors.length > 0) {
+  const validation = validateTrendCandidateInputDetailed(input);
+  if (validation.errors.length > 0) {
     return NextResponse.json(
       {
         ok: false,
-        errors,
+        errors: validation.errors,
       },
       { status: 400 },
     );
   }
 
-  const created = createTrendCandidate(input);
+  const created = createTrendCandidate({
+    ...input,
+    sourceUrl: validation.normalizedSourceUrl,
+    sourcePlatform: validation.inferredSourcePlatform,
+  });
 
   return NextResponse.json({
     ok: true,
     item: created,
+    normalization: {
+      sourceUrl: validation.normalizedSourceUrl,
+      sourcePlatform: validation.inferredSourcePlatform,
+      youtube: validation.youtube ?? null,
+    },
   });
 }

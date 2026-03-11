@@ -34,12 +34,15 @@ Phase 4 operator workflow MVP in progress on 2026-03-11.
 - web API and worker now read/write the same project snapshot file
 - dashboard actions added for candidate intake and mock pipeline steps
 - worker now supports command modes for batch run / single run / dry run
-- next milestone: repository abstraction and real provider/storage integrations
+- repository abstraction baseline added via `ProjectRepository`
+- pipeline event log added for operator debugging
+- YouTube URL validation + normalization added for watch, shorts, and youtu.be formats
+- next milestone: SQLite repository swap and real provider/storage integrations
 
 ## Monorepo Layout
 - `apps/web` — Next.js app router web UI
 - `apps/worker` — TypeScript worker runtime
-- `packages/core` — shared types and schemas
+- `packages/core` — shared types, repository, validation, and event log
 - `packages/providers` — provider interfaces and mock adapter
 
 ## Commands
@@ -47,3 +50,18 @@ Phase 4 operator workflow MVP in progress on 2026-03-11.
 - `pnpm dev:worker`
 - `pnpm build`
 - `pnpm typecheck`
+
+## Data Storage
+Default snapshot path:
+- `.data/project-snapshot.json`
+
+Override with environment variable:
+- `TREND_TO_VIDEO_DATA_FILE=/absolute/path/to/project-snapshot.json`
+
+## API Notes
+`POST /api/trend-candidates` accepts:
+- `topic`
+- `sourceUrl`
+- `sourcePlatform` (`youtube` | `shorts` | `manual`)
+
+For non-manual inputs, the backend validates and normalizes supported YouTube URLs before persistence.
