@@ -64,6 +64,27 @@ export interface UploadProvider {
   uploadVideo(input: UploadVideoInput): Promise<UploadVideoResult>;
 }
 
+function getJsonHeaders(apiKey?: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+  };
+}
+
+async function postJson<T>(endpoint: string, body: unknown, apiKey?: string): Promise<T> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: getJsonHeaders(apiKey),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Provider request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 export class MockSoraVideoProvider implements VideoProvider {
   readonly name = 'mock-sora-adapter';
 
@@ -100,33 +121,53 @@ export class EnvWebhookVideoProvider implements VideoProvider {
     }
 
     const apiKey = process.env.TREND_TO_VIDEO_GENERATION_API_KEY;
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        prompt: input.prompt,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Generation provider request failed with status ${response.status}`);
-    }
-
-    const payload = (await response.json()) as {
+    const payload = await postJson<{
       jobId?: string;
       status?: 'queued' | 'completed';
       outputUrl?: string;
       videoUrl?: string;
-    };
+    }>(endpoint, { prompt: input.prompt }, apiKey);
 
     return {
       jobId: payload.jobId ?? `env_generation_${Date.now()}`,
       status: payload.status ?? (payload.outputUrl || payload.videoUrl ? 'completed' : 'queued'),
       provider: this.name,
       outputUrl: payload.outputUrl ?? payload.videoUrl,
+    };
+  }
+}
+
+export class InferenceShVideoProvider implements VideoProvider {
+  readonly name = 'inference-sh-video';
+
+  async generateVideo(input: GenerateVideoInput): Promise<GenerateVideoResult> {
+    const endpoint = process.env.TREND_TO_VIDEO_INFERENCE_SH_ENDPOINT;
+    if (!endpoint) {
+      throw new Error('TREND_TO_VIDEO_INFERENCE_SH_ENDPOINT is required for inference-sh-video provider');
+    }
+
+    const apiKey = process.env.TREND_TO_VIDEO_INFERENCE_SH_API_KEY;
+    const model = process.env.TREND_TO_VIDEO_INFERENCE_SH_MODEL || 'veo3';
+    const payload = await postJson<{
+      id?: string;
+      status?: 'queued' | 'completed';
+      output?: { url?: string };
+      outputUrl?: string;
+      videoUrl?: string;
+    }>(
+      endpoint,
+      {
+        model,
+        prompt: input.prompt,
+      },
+      apiKey,
+    );
+
+    return {
+      jobId: payload.id ?? `inference_sh_${Date.now()}`,
+      status: payload.status ?? (payload.output?.url || payload.outputUrl || payload.videoUrl ? 'completed' : 'queued'),
+      provider: this.name,
+      outputUrl: payload.output?.url ?? payload.outputUrl ?? payload.videoUrl,
     };
   }
 }
@@ -155,31 +196,22 @@ export class EnvWebhookUploadProvider implements UploadProvider {
     }
 
     const apiKey = process.env.TREND_TO_VIDEO_UPLOAD_API_KEY;
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
+    const payload = await postJson<{
+      jobId?: string;
+      status?: 'queued' | 'completed';
+      remoteUrl?: string;
+      uploadUrl?: string;
+    }>(
+      endpoint,
+      {
         videoUrl: input.videoUrl,
         title: input.title,
         description: input.description,
         scheduledFor: input.scheduledFor,
         platform: 'youtube',
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Upload provider request failed with status ${response.status}`);
-    }
-
-    const payload = (await response.json()) as {
-      jobId?: string;
-      status?: 'queued' | 'completed';
-      remoteUrl?: string;
-      uploadUrl?: string;
-    };
+      },
+      apiKey,
+    );
 
     return {
       jobId: payload.jobId ?? `env_upload_${Date.now()}`,
@@ -187,6 +219,45 @@ export class EnvWebhookUploadProvider implements UploadProvider {
       provider: this.name,
       platform: 'youtube',
       remoteUrl: payload.remoteUrl ?? payload.uploadUrl,
+    };
+  }
+}
+
+export class YouTubeStudioWebhookUploadProvider implements UploadProvider {
+  readonly name = 'youtube-studio-webhook';
+
+  async uploadVideo(input: UploadVideoInput): Promise<UploadVideoResult> {
+    const endpoint = process.env.TREND_TO_VIDEO_YOUTUBE_STUDIO_ENDPOINT;
+    if (!endpoint) {
+      throw new Error('TREND_TO_VIDEO_YOUTUBE_STUDIO_ENDPOINT is required for youtube-studio-webhook provider');
+    }
+
+    const apiKey = process.env.TREND_TO_VIDEO_YOUTUBE_STUDIO_API_KEY;
+    const visibility = process.env.TREND_TO_VIDEO_YOUTUBE_VISIBILITY || 'private';
+    const payload = await postJson<{
+      jobId?: string;
+      status?: 'queued' | 'completed';
+      remoteUrl?: string;
+      watchUrl?: string;
+    }>(
+      endpoint,
+      {
+        platform: 'youtube',
+        videoUrl: input.videoUrl,
+        title: input.title,
+        description: input.description,
+        scheduledFor: input.scheduledFor,
+        visibility,
+      },
+      apiKey,
+    );
+
+    return {
+      jobId: payload.jobId ?? `youtube_upload_${Date.now()}`,
+      status: payload.status ?? 'completed',
+      provider: this.name,
+      platform: 'youtube',
+      remoteUrl: payload.remoteUrl ?? payload.watchUrl,
     };
   }
 }
@@ -274,6 +345,10 @@ export function getVideoProvider(providerName?: string): VideoProvider {
     return videoProviderRegistry.get(preferred)!;
   }
 
+  if (process.env.TREND_TO_VIDEO_INFERENCE_SH_ENDPOINT) {
+    return videoProviderRegistry.get('inference-sh-video')!;
+  }
+
   return process.env.TREND_TO_VIDEO_GENERATION_ENDPOINT
     ? videoProviderRegistry.get('env-webhook-video')!
     : videoProviderRegistry.get('mock-sora-adapter')!;
@@ -293,6 +368,10 @@ export function getUploadProvider(providerName?: string): UploadProvider {
     return uploadProviderRegistry.get(preferred)!;
   }
 
+  if (process.env.TREND_TO_VIDEO_YOUTUBE_STUDIO_ENDPOINT) {
+    return uploadProviderRegistry.get('youtube-studio-webhook')!;
+  }
+
   return process.env.TREND_TO_VIDEO_UPLOAD_ENDPOINT
     ? uploadProviderRegistry.get('env-webhook-upload')!
     : uploadProviderRegistry.get('mock-youtube-upload')!;
@@ -301,6 +380,8 @@ export function getUploadProvider(providerName?: string): UploadProvider {
 export const mockVideoProvider = registerVideoProvider(new MockSoraVideoProvider());
 export const mockVeoVideoProvider = registerVideoProvider(new MockVeoVideoProvider());
 export const envWebhookVideoProvider = registerVideoProvider(new EnvWebhookVideoProvider());
+export const inferenceShVideoProvider = registerVideoProvider(new InferenceShVideoProvider());
 export const baselineAnalysisProvider = registerAnalysisProvider(new BaselineAnalysisProvider());
 export const mockYouTubeUploadProvider = registerUploadProvider(new MockYouTubeUploadProvider());
 export const envWebhookUploadProvider = registerUploadProvider(new EnvWebhookUploadProvider());
+export const youtubeStudioWebhookUploadProvider = registerUploadProvider(new YouTubeStudioWebhookUploadProvider());
