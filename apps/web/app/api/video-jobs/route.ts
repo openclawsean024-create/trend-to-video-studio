@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!getPromptDraftById(promptDraftId)) {
+  const promptDraft = getPromptDraftById(promptDraftId);
+  if (!promptDraft) {
     return NextResponse.json(
       {
         ok: false,
@@ -39,13 +40,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const providerName = String(body?.provider ?? 'mock-sora-adapter');
-  const provider = getVideoProvider(providerName);
+  const provider = getVideoProvider(String(body?.provider ?? '') || undefined);
   const job = createVideoJob(promptDraftId, provider.name);
   const result = await provider.generateVideo({
-    prompt: String(body?.prompt ?? 'Generate original short-form video'),
+    prompt: String(body?.prompt ?? promptDraft.videoPrompt ?? 'Generate original short-form video'),
   });
-  const updated = updateVideoJobResult(job.id, result.outputUrl ?? 'memory://video/output.mp4', 'completed');
+  const updated = updateVideoJobResult(
+    job.id,
+    result.outputUrl ?? 'memory://video/output.mp4',
+    result.status === 'completed' ? 'completed' : 'processing',
+  );
 
   return NextResponse.json({
     ok: true,

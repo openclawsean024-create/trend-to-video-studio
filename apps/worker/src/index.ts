@@ -4,13 +4,14 @@ import {
   createSourceAssets,
   createUploadJob,
   createVideoJob,
+  getPromptDraftById,
   getTrendCandidateById,
   listQueuedTrendCandidates,
   listSourceAssetsByTrendCandidate,
   updateTrendCandidateStatus,
   updateVideoJobResult,
 } from '@trend-to-video-studio/core';
-import { getAnalysisProvider, getVideoProvider } from '@trend-to-video-studio/providers';
+import { getAnalysisProvider, getUploadProvider, getVideoProvider } from '@trend-to-video-studio/providers';
 
 type WorkerMode = 'process-all' | 'process-one' | 'dry-run';
 
@@ -27,7 +28,11 @@ function getMode(): WorkerMode {
   return 'process-all';
 }
 
-async function processCandidate(trendCandidateId: string, providerName = 'mock-sora-adapter') {
+async function processCandidate(
+  trendCandidateId: string,
+  videoProviderName?: string,
+  uploadProviderName?: string,
+) {
   const candidate = getTrendCandidateById(trendCandidateId);
   if (!candidate) {
     console.log(`Candidate not found: ${trendCandidateId}`);
@@ -60,29 +65,36 @@ async function processCandidate(trendCandidateId: string, providerName = 'mock-s
   const promptDraft = createGeneratedPromptDraft(candidate.id);
   console.log('Generated prompt draft from analysis artifacts:', promptDraft);
 
-  const provider = getVideoProvider(providerName);
-  const queuedVideoJob = createVideoJob(promptDraft.id, provider.name);
+  const videoProvider = getVideoProvider(videoProviderName);
+  const queuedVideoJob = createVideoJob(promptDraft.id, videoProvider.name);
   console.log('Queued video job:', queuedVideoJob);
 
-  const result = await provider.generateVideo({
+  const generationResult = await videoProvider.generateVideo({
     prompt: promptDraft.videoPrompt,
   });
 
   const completedVideoJob = updateVideoJobResult(
     queuedVideoJob.id,
-    result.outputUrl ?? 'memory://video/output.mp4',
-    'completed',
+    generationResult.outputUrl ?? 'memory://video/output.mp4',
+    generationResult.status === 'completed' ? 'completed' : 'processing',
   );
 
-  const uploadJob = createUploadJob(
-    queuedVideoJob.id,
-    new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-  );
+  const uploadProvider = getUploadProvider(uploadProviderName);
+  const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const uploadJob = createUploadJob(queuedVideoJob.id, scheduledFor);
+  const prompt = getPromptDraftById(promptDraft.id);
+  const uploadResult = await uploadProvider.uploadVideo({
+    videoUrl: generationResult.outputUrl ?? 'memory://video/output.mp4',
+    title: prompt?.title ?? `${candidate.topic} Generated Video`,
+    description: prompt?.videoPrompt ?? `Generated from trend candidate ${candidate.id}`,
+    scheduledFor,
+  });
   const completedUploadJob = completeUploadJob(uploadJob.id);
   updateTrendCandidateStatus(candidate.id, 'completed');
 
-  console.log('Mock generation result:', result);
+  console.log('Generation result:', generationResult);
   console.log('Completed video job:', completedVideoJob);
+  console.log('Upload result:', uploadResult);
   console.log('Completed upload job:', completedUploadJob);
   console.log('Current asset count for candidate:', listSourceAssetsByTrendCandidate(candidate.id).length);
 }
@@ -100,7 +112,8 @@ async function main() {
     return;
   }
 
-  const providerName = getArg('--provider') ?? 'mock-sora-adapter';
+  const videoProviderName = getArg('--provider');
+  const uploadProviderName = getArg('--upload-provider');
 
   if (mode === 'process-one') {
     const candidateId = getArg('--candidate-id') ?? queuedCandidates[0]?.id;
@@ -109,12 +122,12 @@ async function main() {
       return;
     }
 
-    await processCandidate(candidateId, providerName);
+    await processCandidate(candidateId, videoProviderName, uploadProviderName);
     return;
   }
 
   for (const candidate of queuedCandidates) {
-    await processCandidate(candidate.id, providerName);
+    await processCandidate(candidate.id, videoProviderName, uploadProviderName);
   }
 }
 

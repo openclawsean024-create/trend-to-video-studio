@@ -30,6 +30,21 @@ export type AnalyzeTrendResult = {
   artifacts: AnalysisArtifactDraft[];
 };
 
+export type UploadVideoInput = {
+  videoUrl: string;
+  title: string;
+  description: string;
+  scheduledFor?: string;
+};
+
+export type UploadVideoResult = {
+  jobId: string;
+  status: 'queued' | 'completed';
+  provider: string;
+  platform: 'youtube';
+  remoteUrl?: string;
+};
+
 export interface VideoProvider {
   readonly name: string;
   generateVideo(input: GenerateVideoInput): Promise<GenerateVideoResult>;
@@ -38,6 +53,11 @@ export interface VideoProvider {
 export interface AnalysisProvider {
   readonly name: string;
   analyzeTrend(input: AnalyzeTrendInput): Promise<AnalyzeTrendResult>;
+}
+
+export interface UploadProvider {
+  readonly name: string;
+  uploadVideo(input: UploadVideoInput): Promise<UploadVideoResult>;
 }
 
 export class MockSoraVideoProvider implements VideoProvider {
@@ -62,6 +82,107 @@ export class MockVeoVideoProvider implements VideoProvider {
       status: 'queued',
       provider: this.name,
       outputUrl: 'memory://video/veo-output.mp4',
+    };
+  }
+}
+
+export class EnvWebhookVideoProvider implements VideoProvider {
+  readonly name = 'env-webhook-video';
+
+  async generateVideo(input: GenerateVideoInput): Promise<GenerateVideoResult> {
+    const endpoint = process.env.TREND_TO_VIDEO_GENERATION_ENDPOINT;
+    if (!endpoint) {
+      throw new Error('TREND_TO_VIDEO_GENERATION_ENDPOINT is required for env-webhook-video provider');
+    }
+
+    const apiKey = process.env.TREND_TO_VIDEO_GENERATION_API_KEY;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        prompt: input.prompt,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Generation provider request failed with status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      jobId?: string;
+      status?: 'queued' | 'completed';
+      outputUrl?: string;
+      videoUrl?: string;
+    };
+
+    return {
+      jobId: payload.jobId ?? `env_generation_${Date.now()}`,
+      status: payload.status ?? (payload.outputUrl || payload.videoUrl ? 'completed' : 'queued'),
+      provider: this.name,
+      outputUrl: payload.outputUrl ?? payload.videoUrl,
+    };
+  }
+}
+
+export class MockYouTubeUploadProvider implements UploadProvider {
+  readonly name = 'mock-youtube-upload';
+
+  async uploadVideo(input: UploadVideoInput): Promise<UploadVideoResult> {
+    return {
+      jobId: `mock_upload_${Date.now()}`,
+      status: 'completed',
+      provider: this.name,
+      platform: 'youtube',
+      remoteUrl: `memory://youtube/${encodeURIComponent(input.title)}`,
+    };
+  }
+}
+
+export class EnvWebhookUploadProvider implements UploadProvider {
+  readonly name = 'env-webhook-upload';
+
+  async uploadVideo(input: UploadVideoInput): Promise<UploadVideoResult> {
+    const endpoint = process.env.TREND_TO_VIDEO_UPLOAD_ENDPOINT;
+    if (!endpoint) {
+      throw new Error('TREND_TO_VIDEO_UPLOAD_ENDPOINT is required for env-webhook-upload provider');
+    }
+
+    const apiKey = process.env.TREND_TO_VIDEO_UPLOAD_API_KEY;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        videoUrl: input.videoUrl,
+        title: input.title,
+        description: input.description,
+        scheduledFor: input.scheduledFor,
+        platform: 'youtube',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload provider request failed with status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      jobId?: string;
+      status?: 'queued' | 'completed';
+      remoteUrl?: string;
+      uploadUrl?: string;
+    };
+
+    return {
+      jobId: payload.jobId ?? `env_upload_${Date.now()}`,
+      status: payload.status ?? 'completed',
+      provider: this.name,
+      platform: 'youtube',
+      remoteUrl: payload.remoteUrl ?? payload.uploadUrl,
     };
   }
 }
@@ -114,6 +235,7 @@ export class BaselineAnalysisProvider implements AnalysisProvider {
 
 const videoProviderRegistry = new Map<string, VideoProvider>();
 const analysisProviderRegistry = new Map<string, AnalysisProvider>();
+const uploadProviderRegistry = new Map<string, UploadProvider>();
 
 export function registerVideoProvider(provider: VideoProvider): VideoProvider {
   videoProviderRegistry.set(provider.name, provider);
@@ -125,6 +247,11 @@ export function registerAnalysisProvider(provider: AnalysisProvider): AnalysisPr
   return provider;
 }
 
+export function registerUploadProvider(provider: UploadProvider): UploadProvider {
+  uploadProviderRegistry.set(provider.name, provider);
+  return provider;
+}
+
 export function listVideoProviders(): string[] {
   return [...videoProviderRegistry.keys()].sort();
 }
@@ -133,12 +260,19 @@ export function listAnalysisProviders(): string[] {
   return [...analysisProviderRegistry.keys()].sort();
 }
 
+export function listUploadProviders(): string[] {
+  return [...uploadProviderRegistry.keys()].sort();
+}
+
 export function getVideoProvider(providerName?: string): VideoProvider {
-  if (providerName && videoProviderRegistry.has(providerName)) {
-    return videoProviderRegistry.get(providerName)!;
+  const preferred = providerName || process.env.TREND_TO_VIDEO_DEFAULT_VIDEO_PROVIDER;
+  if (preferred && videoProviderRegistry.has(preferred)) {
+    return videoProviderRegistry.get(preferred)!;
   }
 
-  return videoProviderRegistry.get('mock-sora-adapter')!;
+  return process.env.TREND_TO_VIDEO_GENERATION_ENDPOINT
+    ? videoProviderRegistry.get('env-webhook-video')!
+    : videoProviderRegistry.get('mock-sora-adapter')!;
 }
 
 export function getAnalysisProvider(providerName?: string): AnalysisProvider {
@@ -149,6 +283,20 @@ export function getAnalysisProvider(providerName?: string): AnalysisProvider {
   return analysisProviderRegistry.get('baseline-analysis')!;
 }
 
+export function getUploadProvider(providerName?: string): UploadProvider {
+  const preferred = providerName || process.env.TREND_TO_VIDEO_DEFAULT_UPLOAD_PROVIDER;
+  if (preferred && uploadProviderRegistry.has(preferred)) {
+    return uploadProviderRegistry.get(preferred)!;
+  }
+
+  return process.env.TREND_TO_VIDEO_UPLOAD_ENDPOINT
+    ? uploadProviderRegistry.get('env-webhook-upload')!
+    : uploadProviderRegistry.get('mock-youtube-upload')!;
+}
+
 export const mockVideoProvider = registerVideoProvider(new MockSoraVideoProvider());
 export const mockVeoVideoProvider = registerVideoProvider(new MockVeoVideoProvider());
+export const envWebhookVideoProvider = registerVideoProvider(new EnvWebhookVideoProvider());
 export const baselineAnalysisProvider = registerAnalysisProvider(new BaselineAnalysisProvider());
+export const mockYouTubeUploadProvider = registerUploadProvider(new MockYouTubeUploadProvider());
+export const envWebhookUploadProvider = registerUploadProvider(new EnvWebhookUploadProvider());
