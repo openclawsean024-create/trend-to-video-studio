@@ -1,4 +1,9 @@
-import { createTrendCandidate, listTrendCandidates } from '@trend-to-video-studio/core';
+import {
+  createTrendCandidate,
+  listTrendCandidates,
+  normalizeSourcePlatform,
+  validateTrendCandidateInput,
+} from '@trend-to-video-studio/core';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
@@ -11,21 +16,24 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const body = await request.json();
 
-  if (!body?.topic || !body?.sourceUrl) {
+  const input = {
+    topic: String(body?.topic ?? ''),
+    sourceUrl: String(body?.sourceUrl ?? ''),
+    sourcePlatform: normalizeSourcePlatform(body?.sourcePlatform),
+  };
+
+  const errors = validateTrendCandidateInput(input);
+  if (errors.length > 0) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'topic and sourceUrl are required',
+        errors,
       },
       { status: 400 },
     );
   }
 
-  const created = createTrendCandidate({
-    topic: String(body.topic),
-    sourceUrl: String(body.sourceUrl),
-    sourcePlatform: body.sourcePlatform === 'shorts' ? 'shorts' : body.sourcePlatform === 'manual' ? 'manual' : 'youtube',
-  });
+  const created = createTrendCandidate(input);
 
   return NextResponse.json({
     ok: true,

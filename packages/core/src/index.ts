@@ -2,12 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 export type JobStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
+export type SourcePlatform = 'youtube' | 'shorts' | 'manual';
 
 export type TrendCandidate = {
   id: string;
   topic: string;
   sourceUrl: string;
-  sourcePlatform: 'youtube' | 'shorts' | 'manual';
+  sourcePlatform: SourcePlatform;
   discoveredAt: string;
   status: JobStatus;
 };
@@ -15,7 +16,7 @@ export type TrendCandidate = {
 export type CreateTrendCandidateInput = {
   topic: string;
   sourceUrl: string;
-  sourcePlatform: TrendCandidate['sourcePlatform'];
+  sourcePlatform: SourcePlatform;
 };
 
 export type SourceAsset = {
@@ -176,16 +177,57 @@ export function getProjectSnapshot(): ProjectSnapshot {
   return readSnapshot();
 }
 
+export function normalizeSourcePlatform(value: string | undefined | null): SourcePlatform {
+  if (value === 'shorts') return 'shorts';
+  if (value === 'manual') return 'manual';
+  return 'youtube';
+}
+
+export function isValidUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function isValidIsoDateTime(value: string): boolean {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+export function validateTrendCandidateInput(input: CreateTrendCandidateInput): string[] {
+  const errors: string[] = [];
+
+  if (!input.topic.trim()) {
+    errors.push('topic is required');
+  }
+
+  if (!input.sourceUrl.trim()) {
+    errors.push('sourceUrl is required');
+  } else if (!isValidUrl(input.sourceUrl)) {
+    errors.push('sourceUrl must be a valid http or https URL');
+  }
+
+  return errors;
+}
+
 export function listTrendCandidates(): TrendCandidate[] {
   return [...readSnapshot().trendCandidates].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+}
+
+export function getTrendCandidateById(trendCandidateId: string): TrendCandidate | undefined {
+  return readSnapshot().trendCandidates.find((item) => item.id === trendCandidateId);
 }
 
 export function createTrendCandidate(input: CreateTrendCandidateInput): TrendCandidate {
   return mutateSnapshot((snapshot) => {
     const created: TrendCandidate = {
       id: createId('trend'),
-      topic: input.topic,
-      sourceUrl: input.sourceUrl,
+      topic: input.topic.trim(),
+      sourceUrl: input.sourceUrl.trim(),
       sourcePlatform: input.sourcePlatform,
       discoveredAt: new Date().toISOString(),
       status: 'queued',
@@ -250,6 +292,10 @@ export function listPromptDraftsByTrendCandidate(trendCandidateId: string): Prom
   return readSnapshot().promptDrafts.filter((draft) => draft.trendCandidateId === trendCandidateId);
 }
 
+export function getPromptDraftById(promptDraftId: string): PromptDraft | undefined {
+  return readSnapshot().promptDrafts.find((draft) => draft.id === promptDraftId);
+}
+
 export function createMockPromptDraft(trendCandidateId: string): PromptDraft {
   return mutateSnapshot((snapshot) => {
     const trendCandidate = snapshot.trendCandidates.find((candidate) => candidate.id === trendCandidateId);
@@ -272,6 +318,10 @@ export function createMockPromptDraft(trendCandidateId: string): PromptDraft {
 
 export function listVideoJobs(): VideoJob[] {
   return [...readSnapshot().videoJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function getVideoJobById(videoJobId: string): VideoJob | undefined {
+  return readSnapshot().videoJobs.find((job) => job.id === videoJobId);
 }
 
 export function createVideoJob(promptDraftId: string, provider = 'mock-sora-adapter'): VideoJob {

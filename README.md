@@ -29,10 +29,12 @@ It does **not** implement watermark removal, DRM bypass, or direct cloning of pr
 - Pluggable video generation providers
 
 ## Status
-Phase 3 local persistent MVP in progress on 2026-03-11.
+Phase 4 operator workflow MVP in progress on 2026-03-11.
 - shared local JSON repository added for cross-process state
 - web API and worker now read/write the same project snapshot file
-- next milestone: interactive dashboard actions and real provider/storage integrations
+- dashboard actions added for candidate intake and mock pipeline steps
+- worker now supports command modes for batch run / single run / dry run
+- next milestone: repository abstraction and real provider/storage integrations
 
 ## Monorepo Layout
 - `apps/web` — Next.js app router web UI
