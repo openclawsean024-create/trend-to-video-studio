@@ -9,7 +9,7 @@ import {
   listUploadJobs,
   listVideoJobs,
 } from '@trend-to-video-studio/core';
-import { listVideoProviders } from '@trend-to-video-studio/providers';
+import { listAnalysisProviders, listVideoProviders } from '@trend-to-video-studio/providers';
 import {
   createPromptAction,
   createTrendCandidateAction,
@@ -71,6 +71,7 @@ export default function HomePage() {
   const pipelineEvents = listPipelineEvents(20);
   const snapshot = getProjectSnapshot();
   const videoProviders = listVideoProviders();
+  const analysisProviders = listAnalysisProviders();
   const selectedEntityId = pipelineEvents[0]?.entityId;
   const selectedEntityEvents = selectedEntityId
     ? listPipelineEvents(100).filter((event) => event.entityId === selectedEntityId)
@@ -101,6 +102,7 @@ export default function HomePage() {
         <div>Video jobs: {snapshot.videoJobs.length}</div>
         <div>Upload jobs: {snapshot.uploadJobs.length}</div>
         <div>Pipeline events: {snapshot.pipelineEvents.length}</div>
+        <div>Available analysis providers: {analysisProviders.join(', ')}</div>
         <div>Available video providers: {videoProviders.join(', ')}</div>
       </section>
 

@@ -37,6 +37,12 @@ export type SourceAsset = {
   createdAt: string;
 };
 
+export type CreateSourceAssetInput = {
+  trendCandidateId: string;
+  assetType: SourceAsset['assetType'];
+  uri: string;
+};
+
 export type PromptDraft = {
   id: string;
   trendCandidateId: string;
@@ -396,6 +402,7 @@ export interface ProjectRepository {
   updateTrendCandidateStatus(trendCandidateId: string, status: JobStatus): TrendCandidate | undefined;
   listSourceAssets(): SourceAsset[];
   listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[];
+  createSourceAssets(inputs: CreateSourceAssetInput[]): SourceAsset[];
   createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[];
   listPromptDrafts(): PromptDraft[];
   listPromptDraftsByTrendCandidate(trendCandidateId: string): PromptDraft[];
@@ -488,40 +495,49 @@ export class SnapshotProjectRepository implements ProjectRepository {
     return this.store.read().sourceAssets.filter((asset) => asset.trendCandidateId === trendCandidateId);
   }
 
-  createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
+  createSourceAssets(inputs: CreateSourceAssetInput[]): SourceAsset[] {
     return this.mutate((snapshot) => {
       const createdAt = new Date().toISOString();
-      const artifacts: SourceAsset[] = [
-        {
-          id: createId('asset_meta'),
-          trendCandidateId,
-          assetType: 'metadata',
-          uri: `memory://${trendCandidateId}/metadata.json`,
-          createdAt,
-        },
-        {
-          id: createId('asset_shot'),
-          trendCandidateId,
-          assetType: 'screenshot',
-          uri: `memory://${trendCandidateId}/shot-001.png`,
-          createdAt,
-        },
-      ];
+      const artifacts: SourceAsset[] = inputs.map((input) => ({
+        id: createId(`asset_${input.assetType}`),
+        trendCandidateId: input.trendCandidateId,
+        assetType: input.assetType,
+        uri: input.uri.trim(),
+        createdAt,
+      }));
 
       snapshot.sourceAssets.unshift(...artifacts);
+
+      const primaryTrendCandidateId = inputs[0]?.trendCandidateId ?? 'unknown';
       recordEvent(snapshot, {
         type: 'analysis_artifacts_created',
         entityType: 'sourceAsset',
-        entityId: trendCandidateId,
+        entityId: primaryTrendCandidateId,
         message: `Created ${artifacts.length} analysis artifacts`,
         metadata: {
-          trendCandidateId,
+          trendCandidateId: primaryTrendCandidateId,
           assetIds: artifacts.map((asset) => asset.id),
           assetTypes: artifacts.map((asset) => asset.assetType),
+          assetUris: artifacts.map((asset) => asset.uri),
         },
       });
       return artifacts;
     });
+  }
+
+  createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {
+    return this.createSourceAssets([
+      {
+        trendCandidateId,
+        assetType: 'metadata',
+        uri: `memory://${trendCandidateId}/metadata.json`,
+      },
+      {
+        trendCandidateId,
+        assetType: 'screenshot',
+        uri: `memory://${trendCandidateId}/shot-001.png`,
+      },
+    ]);
   }
 
   listPromptDrafts(): PromptDraft[] {
@@ -845,6 +861,10 @@ export function listSourceAssets(): SourceAsset[] {
 
 export function listSourceAssetsByTrendCandidate(trendCandidateId: string): SourceAsset[] {
   return defaultRepository.listSourceAssetsByTrendCandidate(trendCandidateId);
+}
+
+export function createSourceAssets(inputs: CreateSourceAssetInput[]): SourceAsset[] {
+  return defaultRepository.createSourceAssets(inputs);
 }
 
 export function createMockAnalysisArtifacts(trendCandidateId: string): SourceAsset[] {

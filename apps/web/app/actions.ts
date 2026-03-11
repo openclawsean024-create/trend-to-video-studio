@@ -2,8 +2,8 @@
 
 import {
   completeUploadJob,
-  createMockAnalysisArtifacts,
   createMockPromptDraft,
+  createSourceAssets,
   createTrendCandidate,
   createUploadJob,
   createVideoJob,
@@ -16,7 +16,7 @@ import {
   updateVideoJobResult,
   validateTrendCandidateInputDetailed,
 } from '@trend-to-video-studio/core';
-import { getVideoProvider } from '@trend-to-video-studio/providers';
+import { getAnalysisProvider, getVideoProvider } from '@trend-to-video-studio/providers';
 import { revalidatePath } from 'next/cache';
 
 function asString(value: FormDataEntryValue | null): string {
@@ -46,10 +46,28 @@ export async function createTrendCandidateAction(formData: FormData) {
 export async function runAnalysisAction(formData: FormData) {
   const trendCandidateId = asString(formData.get('trendCandidateId'));
   if (!trendCandidateId) throw new Error('trendCandidateId is required');
-  if (!getTrendCandidateById(trendCandidateId)) throw new Error('trendCandidateId does not exist');
+
+  const candidate = getTrendCandidateById(trendCandidateId);
+  if (!candidate) throw new Error('trendCandidateId does not exist');
 
   updateTrendCandidateStatus(trendCandidateId, 'processing');
-  createMockAnalysisArtifacts(trendCandidateId);
+
+  const analysisProvider = getAnalysisProvider();
+  const result = await analysisProvider.analyzeTrend({
+    trendCandidateId: candidate.id,
+    topic: candidate.topic,
+    sourceUrl: candidate.sourceUrl,
+    sourcePlatform: candidate.sourcePlatform,
+  });
+
+  createSourceAssets(
+    result.artifacts.map((artifact) => ({
+      trendCandidateId: candidate.id,
+      assetType: artifact.assetType,
+      uri: artifact.uri,
+    })),
+  );
+  updateTrendCandidateStatus(trendCandidateId, 'completed');
   revalidatePath('/');
 }
 

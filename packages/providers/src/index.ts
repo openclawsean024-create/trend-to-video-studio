@@ -9,9 +9,32 @@ export type GenerateVideoResult = {
   outputUrl?: string;
 };
 
+export type AnalyzeTrendInput = {
+  trendCandidateId: string;
+  topic: string;
+  sourceUrl: string;
+  sourcePlatform: 'youtube' | 'shorts' | 'manual';
+};
+
+export type AnalysisArtifactDraft = {
+  assetType: 'url' | 'screenshot' | 'transcript' | 'metadata';
+  uri: string;
+};
+
+export type AnalyzeTrendResult = {
+  provider: string;
+  summary: string;
+  artifacts: AnalysisArtifactDraft[];
+};
+
 export interface VideoProvider {
   readonly name: string;
   generateVideo(input: GenerateVideoInput): Promise<GenerateVideoResult>;
+}
+
+export interface AnalysisProvider {
+  readonly name: string;
+  analyzeTrend(input: AnalyzeTrendInput): Promise<AnalyzeTrendResult>;
 }
 
 export class MockSoraVideoProvider implements VideoProvider {
@@ -40,24 +63,71 @@ export class MockVeoVideoProvider implements VideoProvider {
   }
 }
 
-const providerRegistry = new Map<string, VideoProvider>();
+export class BaselineAnalysisProvider implements AnalysisProvider {
+  readonly name = 'baseline-analysis';
+
+  async analyzeTrend(input: AnalyzeTrendInput): Promise<AnalyzeTrendResult> {
+    const safeTopic = input.topic.trim() || 'Untitled trend';
+    const stem = `memory://${input.trendCandidateId}`;
+
+    return {
+      provider: this.name,
+      summary: `Structured analysis prepared for ${safeTopic} from ${input.sourcePlatform} source ${input.sourceUrl}.`,
+      artifacts: [
+        {
+          assetType: 'metadata',
+          uri: `${stem}/analysis-metadata.json`,
+        },
+        {
+          assetType: 'transcript',
+          uri: `${stem}/analysis-transcript.txt`,
+        },
+        {
+          assetType: 'screenshot',
+          uri: `${stem}/keyframe-001.png`,
+        },
+      ],
+    };
+  }
+}
+
+const videoProviderRegistry = new Map<string, VideoProvider>();
+const analysisProviderRegistry = new Map<string, AnalysisProvider>();
 
 export function registerVideoProvider(provider: VideoProvider): VideoProvider {
-  providerRegistry.set(provider.name, provider);
+  videoProviderRegistry.set(provider.name, provider);
+  return provider;
+}
+
+export function registerAnalysisProvider(provider: AnalysisProvider): AnalysisProvider {
+  analysisProviderRegistry.set(provider.name, provider);
   return provider;
 }
 
 export function listVideoProviders(): string[] {
-  return [...providerRegistry.keys()].sort();
+  return [...videoProviderRegistry.keys()].sort();
+}
+
+export function listAnalysisProviders(): string[] {
+  return [...analysisProviderRegistry.keys()].sort();
 }
 
 export function getVideoProvider(providerName?: string): VideoProvider {
-  if (providerName && providerRegistry.has(providerName)) {
-    return providerRegistry.get(providerName)!;
+  if (providerName && videoProviderRegistry.has(providerName)) {
+    return videoProviderRegistry.get(providerName)!;
   }
 
-  return providerRegistry.get('mock-sora-adapter')!;
+  return videoProviderRegistry.get('mock-sora-adapter')!;
+}
+
+export function getAnalysisProvider(providerName?: string): AnalysisProvider {
+  if (providerName && analysisProviderRegistry.has(providerName)) {
+    return analysisProviderRegistry.get(providerName)!;
+  }
+
+  return analysisProviderRegistry.get('baseline-analysis')!;
 }
 
 export const mockVideoProvider = registerVideoProvider(new MockSoraVideoProvider());
 export const mockVeoVideoProvider = registerVideoProvider(new MockVeoVideoProvider());
+export const baselineAnalysisProvider = registerAnalysisProvider(new BaselineAnalysisProvider());

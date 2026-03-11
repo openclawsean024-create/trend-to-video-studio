@@ -1,9 +1,10 @@
 import {
-  createMockAnalysisArtifacts,
+  createSourceAssets,
   getTrendCandidateById,
   listSourceAssets,
   updateTrendCandidateStatus,
 } from '@trend-to-video-studio/core';
+import { getAnalysisProvider } from '@trend-to-video-studio/providers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!getTrendCandidateById(trendCandidateId)) {
+  const candidate = getTrendCandidateById(trendCandidateId);
+  if (!candidate) {
     return NextResponse.json(
       {
         ok: false,
@@ -38,10 +40,28 @@ export async function POST(request: NextRequest) {
   }
 
   updateTrendCandidateStatus(trendCandidateId, 'processing');
-  const artifacts = createMockAnalysisArtifacts(trendCandidateId);
+
+  const analysisProvider = getAnalysisProvider(String(body?.provider ?? '') || undefined);
+  const result = await analysisProvider.analyzeTrend({
+    trendCandidateId: candidate.id,
+    topic: candidate.topic,
+    sourceUrl: candidate.sourceUrl,
+    sourcePlatform: candidate.sourcePlatform,
+  });
+
+  const artifacts = createSourceAssets(
+    result.artifacts.map((artifact) => ({
+      trendCandidateId: candidate.id,
+      assetType: artifact.assetType,
+      uri: artifact.uri,
+    })),
+  );
+  updateTrendCandidateStatus(trendCandidateId, 'completed');
 
   return NextResponse.json({
     ok: true,
+    provider: result.provider,
+    summary: result.summary,
     items: artifacts,
   });
 }

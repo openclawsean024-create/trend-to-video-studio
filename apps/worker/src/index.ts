@@ -1,7 +1,7 @@
 import {
   completeUploadJob,
-  createMockAnalysisArtifacts,
   createMockPromptDraft,
+  createSourceAssets,
   createUploadJob,
   createVideoJob,
   getTrendCandidateById,
@@ -10,7 +10,7 @@ import {
   updateTrendCandidateStatus,
   updateVideoJobResult,
 } from '@trend-to-video-studio/core';
-import { getVideoProvider } from '@trend-to-video-studio/providers';
+import { getAnalysisProvider, getVideoProvider } from '@trend-to-video-studio/providers';
 
 type WorkerMode = 'process-all' | 'process-one' | 'dry-run';
 
@@ -37,7 +37,21 @@ async function processCandidate(trendCandidateId: string, providerName = 'mock-s
   console.log(`Processing candidate: ${candidate.topic} (${candidate.sourceUrl})`);
   updateTrendCandidateStatus(candidate.id, 'processing');
 
-  const analysisArtifacts = createMockAnalysisArtifacts(candidate.id);
+  const analysisProvider = getAnalysisProvider();
+  const analysisResult = await analysisProvider.analyzeTrend({
+    trendCandidateId: candidate.id,
+    topic: candidate.topic,
+    sourceUrl: candidate.sourceUrl,
+    sourcePlatform: candidate.sourcePlatform,
+  });
+  const analysisArtifacts = createSourceAssets(
+    analysisResult.artifacts.map((artifact) => ({
+      trendCandidateId: candidate.id,
+      assetType: artifact.assetType,
+      uri: artifact.uri,
+    })),
+  );
+  console.log('Analysis provider result:', analysisResult);
   console.log('Generated analysis artifacts:', analysisArtifacts);
 
   const promptDraft = createMockPromptDraft(candidate.id);

@@ -30,14 +30,17 @@ It does **not** implement watermark removal, DRM bypass, or direct cloning of pr
 
 ## Status
 Phase 4 operator workflow MVP in progress on 2026-03-11.
-- shared local JSON repository added for cross-process state
+- shared local repository added for cross-process state
 - web API and worker now read/write the same project snapshot file
-- dashboard actions added for candidate intake and mock pipeline steps
+- dashboard actions added for candidate intake and pipeline steps
 - worker now supports command modes for batch run / single run / dry run
 - repository abstraction baseline added via `ProjectRepository`
 - pipeline event log added for operator debugging
 - YouTube URL validation + normalization added for watch, shorts, and youtu.be formats
-- next milestone: SQLite repository swap and real provider/storage integrations
+- video provider registry added for generation routing
+- baseline analysis provider added for provider-based source analysis output
+- SQLite snapshot store support added behind env-selectable driver
+- next milestone: richer analysis adapters, real generation/upload integrations, and enabling native SQLite on host
 
 ## Monorepo Layout
 - `apps/web` — Next.js app router web UI
