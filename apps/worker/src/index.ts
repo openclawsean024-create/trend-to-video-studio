@@ -4,6 +4,7 @@ import {
   createVideoJob,
   listQueuedTrendCandidates,
   listSourceAssetsByTrendCandidate,
+  updateVideoJobResult,
 } from '@trend-to-video-studio/core';
 import { mockVideoProvider } from '@trend-to-video-studio/providers';
 
@@ -29,7 +30,14 @@ async function main() {
       prompt: promptDraft.videoPrompt,
     });
 
+    const completedVideoJob = updateVideoJobResult(
+      queuedVideoJob.id,
+      result.outputUrl ?? 'memory://video/output.mp4',
+      'completed',
+    );
+
     console.log('Mock generation result:', result);
+    console.log('Completed video job:', completedVideoJob);
     console.log('Current asset count for candidate:', listSourceAssetsByTrendCandidate(candidate.id).length);
   }
 }

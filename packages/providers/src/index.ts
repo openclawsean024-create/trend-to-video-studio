@@ -5,6 +5,8 @@ export type GenerateVideoInput = {
 export type GenerateVideoResult = {
   jobId: string;
   status: 'queued' | 'completed';
+  provider: string;
+  outputUrl?: string;
 };
 
 export interface VideoProvider {
@@ -14,8 +16,10 @@ export interface VideoProvider {
 export const mockVideoProvider: VideoProvider = {
   async generateVideo() {
     return {
-      jobId: 'mock_job_001',
+      jobId: `mock_job_${Date.now()}`,
       status: 'queued',
+      provider: 'mock-sora-adapter',
+      outputUrl: 'memory://video/output.mp4',
     };
   },
 };

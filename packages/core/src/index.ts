@@ -37,6 +37,7 @@ export type VideoJob = {
   id: string;
   promptDraftId: string;
   provider: string;
+  outputUrl?: string;
   status: JobStatus;
   createdAt: string;
 };
@@ -96,6 +97,7 @@ export const exampleVideoJob: VideoJob = {
   id: 'video_001',
   promptDraftId: 'prompt_001',
   provider: 'mock-sora-adapter',
+  outputUrl: 'memory://video/output.mp4',
   status: 'queued',
   createdAt: new Date('2026-03-11T10:15:00Z').toISOString(),
 };
@@ -215,6 +217,15 @@ export function createVideoJob(promptDraftId: string, provider = 'mock-sora-adap
 
   inMemoryVideoJobs.unshift(created);
   return created;
+}
+
+export function updateVideoJobResult(videoJobId: string, outputUrl: string, status: JobStatus = 'completed'): VideoJob | undefined {
+  const job = inMemoryVideoJobs.find((item) => item.id === videoJobId);
+  if (!job) return undefined;
+
+  job.outputUrl = outputUrl;
+  job.status = status;
+  return job;
 }
 
 export function listUploadJobs(): UploadJob[] {

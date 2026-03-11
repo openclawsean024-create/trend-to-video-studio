@@ -9,7 +9,7 @@ export default function HomePage() {
   return (
     <main style={{ fontFamily: 'Arial, sans-serif', padding: 32, lineHeight: 1.6 }}>
       <h1>Trend to Video Studio</h1>
-      <p>Phase 4 prompt studio draft is ready.</p>
+      <p>Phase 5 video generation adapter draft is ready.</p>
 
       <section>
         <h2>Trend Candidates</h2>
@@ -64,6 +64,7 @@ export default function HomePage() {
               <div>Prompt Draft: {job.promptDraftId}</div>
               <div>Provider: {job.provider}</div>
               <div>Status: {job.status}</div>
+              <div>Output URL: {job.outputUrl ?? 'pending'}</div>
             </li>
           ))}
         </ul>
@@ -77,6 +78,8 @@ export default function HomePage() {
         <p>Use <code>POST /api/analysis</code> with <code>{'{ trendCandidateId }'}</code> to create mock analysis artifacts.</p>
         <p>Use <code>GET /api/prompts</code> to list prompt drafts.</p>
         <p>Use <code>POST /api/prompts</code> with <code>{'{ trendCandidateId }'}</code> to create a prompt draft.</p>
+        <p>Use <code>GET /api/video-jobs</code> to list video jobs.</p>
+        <p>Use <code>POST /api/video-jobs</code> with <code>{'{ promptDraftId, prompt? }'}</code> to create and complete a mock video job.</p>
       </section>
     </main>
   );
