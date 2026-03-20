@@ -39,6 +39,9 @@ export type UploadVideoInput = {
   title: string;
   description: string;
   scheduledFor?: string;
+  visibility?: 'private' | 'unlisted' | 'public';
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 };
 
 export type UploadVideoResult = {
