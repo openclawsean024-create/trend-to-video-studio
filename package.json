@@ -1,7 +1,6 @@
 {
   "name": "trend-to-video-studio",
   "private": true,
-  "packageManager": "pnpm@10.6.3",
   "scripts": {
     "dev": "next dev",
     "dev:worker": "pnpm --filter @trend-to-video-studio/worker dev",
