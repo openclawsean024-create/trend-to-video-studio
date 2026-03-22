@@ -16,6 +16,7 @@ import type {
   VideoJob as CVideoJob,
   UploadJob as CUploadJob,
   PipelineEvent as CPipelineEvent,
+  SourceAsset as CSourceAsset,
   JobStatus,
 } from '@trend-to-video-studio/core';
 
@@ -24,6 +25,7 @@ type PromptDraft = CPromptDraft;
 type VideoJob = CVideoJob;
 type UploadJob = CUploadJob;
 type PipelineEvent = CPipelineEvent;
+type SourceAsset = CSourceAsset;
 type Status = JobStatus;
 
 // ── Pipeline Stage ───────────────────────────────────────────────────────────
@@ -352,6 +354,7 @@ export default function StudioDashboard({
   initialEvents,
   storeLabel,
   dataPath,
+  sourceAssets,
 }: {
   initialCandidates: TrendCandidate[];
   initialDrafts: PromptDraft[];
@@ -360,6 +363,7 @@ export default function StudioDashboard({
   initialEvents: PipelineEvent[];
   storeLabel: string;
   dataPath: string;
+  sourceAssets: SourceAsset[];
 }) {
   const [candidates] = useState(initialCandidates);
   const [drafts] = useState(initialDrafts);
