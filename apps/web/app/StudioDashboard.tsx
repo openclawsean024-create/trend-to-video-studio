@@ -59,8 +59,9 @@ const STAGE_COLORS: Record<Stage, { bg: string; border: string; text: string; ic
 };
 
 const STATUS_META: Record<Status, { bg: string; color: string; label: string }> = {
-  pending: { bg: '#f1f5f9', color: '#475569', label: '⏳ 待處理' },
-  running: { bg: '#dbeafe', color: '#1e40af', label: '⚡ 執行中' },
+  draft: { bg: '#f1f5f9', color: '#475569', label: '📝 草稿' },
+  queued: { bg: '#fef9c3', color: '#854d0e', label: '⏳ 排隊中' },
+  processing: { bg: '#dbeafe', color: '#1e40af', label: '⚡ 處理中' },
   completed: { bg: '#d1fae5', color: '#065f46', label: '🎉 完成' },
   failed: { bg: '#fee2e2', color: '#991b1b', label: '❌ 失敗' },
 };
