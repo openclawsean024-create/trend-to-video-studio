@@ -280,7 +280,7 @@ function NewCandidateForm() {
     if (!topic.trim()) return;
     const fd = new FormData(e.currentTarget);
     startTransition(() => {
-      createPromptAction(fd as unknown as React.FormData);
+      createPromptAction(fd);
       setTopic('');
       setSourceUrl('');
       setDone(true);
