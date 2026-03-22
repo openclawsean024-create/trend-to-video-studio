@@ -3,11 +3,11 @@
   "private": true,
   "packageManager": "pnpm@10.6.3",
   "scripts": {
-    "dev": "pnpm --filter @trend-to-video-studio/web dev",
+    "dev": "next dev",
     "dev:worker": "pnpm --filter @trend-to-video-studio/worker dev",
-    "build": "pnpm --filter @trend-to-video-studio/web build",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "build": "next build",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "next": "15.5.14",
