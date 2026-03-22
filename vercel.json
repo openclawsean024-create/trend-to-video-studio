@@ -1,0 +1,6 @@
+{
+  "rootDirectory": "apps/web",
+  "buildCommand": "pnpm build",
+  "outputDirectory": ".next",
+  "installCommand": "pnpm install"
+}
