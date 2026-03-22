@@ -1,6 +1,4 @@
 {
-  "rootDirectory": "apps/web",
-  "buildCommand": "pnpm build",
-  "outputDirectory": ".next",
-  "installCommand": "pnpm install"
+  "buildCommand": "pnpm --filter @trend-to-video-studio/web build",
+  "outputDirectory": ".next"
 }
