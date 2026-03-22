@@ -1,0 +1,18 @@
+{
+  "name": "@trend-to-video-studio/providers",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo providers lint stub",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@trend-to-video-studio/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.8.2"
+  }
+}
