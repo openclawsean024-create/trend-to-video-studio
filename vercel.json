@@ -1,5 +1,4 @@
 {
-  "buildCommand": "pnpm --filter @trend-to-video-studio/web build && cp -r apps/web/.next .",
-  "outputDirectory": ".next",
-  "installCommand": "pnpm install"
+  "buildCommand": "pnpm --filter @trend-to-video-studio/web build",
+  "outputDirectory": ".next"
 }
