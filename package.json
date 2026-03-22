@@ -3,10 +3,21 @@
   "private": true,
   "packageManager": "pnpm@10.6.3",
   "scripts": {
-    "dev:web": "pnpm --filter @trend-to-video-studio/web dev",
+    "dev": "pnpm --filter @trend-to-video-studio/web dev",
     "dev:worker": "pnpm --filter @trend-to-video-studio/worker dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @trend-to-video-studio/web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
+  },
+  "dependencies": {
+    "next": "15.5.14",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.10",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.8.2"
   }
 }

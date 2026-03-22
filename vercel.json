@@ -1,4 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @trend-to-video-studio/web build && ln -sfn apps/web/.next .next",
-  "outputDirectory": ".next"
-}

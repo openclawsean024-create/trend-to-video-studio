@@ -1,7 +1,2 @@
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
-  reactStrictMode: true,
-};
-
-export default nextConfig;
+// This is now at root level - this file is kept for workspace resolution only
+export default {};
