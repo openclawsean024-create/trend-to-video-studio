@@ -10,53 +10,21 @@ import {
 } from './actions';
 
 // ── Types ───────────────────────────────────────────────────────────────────
-type Status = 'pending' | 'running' | 'completed' | 'failed';
+import type {
+  TrendCandidate as CTrendCandidate,
+  PromptDraft as CPromptDraft,
+  VideoJob as CVideoJob,
+  UploadJob as CUploadJob,
+  PipelineEvent as CPipelineEvent,
+  JobStatus,
+} from '@trend-to-video-studio/core';
 
-interface TrendCandidate {
-  id: string;
-  topic: string;
-  sourceUrl: string;
-  sourcePlatform: string;
-  discoveredAt: string;
-  status: Status;
-}
-
-interface PromptDraft {
-  id: string;
-  title: string;
-  trendCandidateId: string;
-  videoPrompt: string;
-  thumbnailPrompt: string;
-  status: Status;
-}
-
-interface VideoJob {
-  id: string;
-  promptDraftId: string;
-  provider: string;
-  status: Status;
-  outputUrl?: string | null;
-  createdAt: string;
-}
-
-interface UploadJob {
-  id: string;
-  videoJobId: string;
-  platform: string;
-  status: Status;
-  scheduledFor?: string | null;
-  createdAt: string;
-}
-
-interface PipelineEvent {
-  id: string;
-  type: string;
-  entityType: string;
-  entityId: string;
-  message: string;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-}
+type TrendCandidate = CTrendCandidate;
+type PromptDraft = CPromptDraft;
+type VideoJob = CVideoJob;
+type UploadJob = CUploadJob;
+type PipelineEvent = CPipelineEvent;
+type Status = JobStatus;
 
 // ── Pipeline Stage ───────────────────────────────────────────────────────────
 type Stage = 'discover' | 'analyze' | 'generate' | 'upload' | 'done';
