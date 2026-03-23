@@ -3,7 +3,6 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:worker": "pnpm --filter @trend-to-video-studio/worker dev",
     "build": "next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

@@ -10,8 +10,8 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@trend-to-video-studio/core": ["packages/core/src"],
-      "@trend-to-video-studio/providers": ["packages/providers/src"]
+      "@trend-to-video-studio/core": ["app/lib/core.ts"],
+      "@trend-to-video-studio/providers": ["app/lib/providers.ts"]
     }
   }
 }
