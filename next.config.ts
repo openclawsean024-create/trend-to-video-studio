@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: __dirname,
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Externalize native Node.js modules - they can't be bundled for the browser
