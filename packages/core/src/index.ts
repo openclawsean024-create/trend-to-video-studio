@@ -1,11 +1,5 @@
 import 'server-only';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-
-// Lazy import for better-sqlite3 - only loaded when SQLite driver is actually used
-function getDatabase() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('better-sqlite3') as typeof import('better-sqlite3').default;
-}
 import { dirname, resolve } from 'node:path';
 
 export type JobStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
@@ -125,14 +119,9 @@ export type TrendCandidateValidationResult = {
 
 const DEFAULT_DATA_DIR = resolve(process.cwd(), '.data');
 const DEFAULT_JSON_DATA_FILE = resolve(DEFAULT_DATA_DIR, 'project-snapshot.json');
-const DEFAULT_SQLITE_DATA_FILE = resolve(DEFAULT_DATA_DIR, 'project-snapshot.sqlite');
 const dataFile = process.env.TREND_TO_VIDEO_DATA_FILE
   ? resolve(process.env.TREND_TO_VIDEO_DATA_FILE)
   : DEFAULT_JSON_DATA_FILE;
-const sqliteFile = process.env.TREND_TO_VIDEO_SQLITE_FILE
-  ? resolve(process.env.TREND_TO_VIDEO_SQLITE_FILE)
-  : DEFAULT_SQLITE_DATA_FILE;
-const repositoryDriver = (process.env.TREND_TO_VIDEO_REPOSITORY_DRIVER ?? 'json').toLowerCase();
 
 const exampleTrendCandidate: TrendCandidate = {
   id: 'trend_001',
@@ -245,97 +234,12 @@ function writeSnapshotToJsonDisk(snapshot: ProjectSnapshot) {
   writeFileSync(dataFile, JSON.stringify(snapshot, null, 2), 'utf8');
 }
 
-function ensureSqliteDatabaseFile() {
-  ensureParentDirectory(sqliteFile);
-}
-
-function createSqliteDatabaseConnection() {
-  ensureSqliteDatabaseFile();
-  const Database = getDatabase();
-  const database = new Database(sqliteFile);
-  database.pragma('journal_mode = WAL');
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS project_snapshot (
-      key TEXT PRIMARY KEY,
-      json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-  return database;
-}
-
-function writeSnapshotToSqlite(snapshot: ProjectSnapshot): void {
-  const database = createSqliteDatabaseConnection();
-  const json = JSON.stringify(snapshot);
-  const updatedAt = new Date().toISOString();
-
-  database
-    .prepare(
-      `
-        INSERT INTO project_snapshot (key, json, updated_at)
-        VALUES ('default', ?, ?)
-        ON CONFLICT(key) DO UPDATE SET
-          json = excluded.json,
-          updated_at = excluded.updated_at
-      `,
-    )
-    .run(json, updatedAt);
-
-  database.close();
-}
-
-function migrateJsonSnapshotToSqliteIfNeeded(database: ReturnType<typeof getDatabase>): void {
-  const row = database
-    .prepare('SELECT json FROM project_snapshot WHERE key = ?')
-    .get('default') as { json: string } | undefined;
-
-  if (row?.json) {
-    return;
-  }
-
-  const seedSnapshot = existsSync(dataFile) ? readSnapshotFromJsonDisk() : structuredClone(initialSnapshot);
-  database
-    .prepare('INSERT INTO project_snapshot (key, json, updated_at) VALUES (?, ?, ?)')
-    .run('default', JSON.stringify(seedSnapshot), new Date().toISOString());
-}
-
-function readSnapshotFromSqlite(): ProjectSnapshot {
-  const database = createSqliteDatabaseConnection();
-  migrateJsonSnapshotToSqliteIfNeeded(database);
-
-  try {
-    const row = database
-      .prepare('SELECT json FROM project_snapshot WHERE key = ?')
-      .get('default') as { json: string } | undefined;
-
-    if (!row?.json) {
-      writeSnapshotToSqlite(initialSnapshot);
-      return structuredClone(initialSnapshot);
-    }
-
-    return normalizeSnapshot(JSON.parse(row.json) as Partial<ProjectSnapshot>);
-  } catch {
-    writeSnapshotToSqlite(initialSnapshot);
-    return structuredClone(initialSnapshot);
-  } finally {
-    database.close();
-  }
-}
-
-function getActiveDataDriver(): 'json' | 'sqlite' {
-  return repositoryDriver === 'json' ? 'json' : 'sqlite';
-}
-
+// SQLite support removed - JSON storage only
 function readSnapshotFromDisk(): ProjectSnapshot {
-  return getActiveDataDriver() === 'sqlite' ? readSnapshotFromSqlite() : readSnapshotFromJsonDisk();
+  return readSnapshotFromJsonDisk();
 }
 
 function writeSnapshotToDisk(snapshot: ProjectSnapshot) {
-  if (getActiveDataDriver() === 'sqlite') {
-    writeSnapshotToSqlite(snapshot);
-    return;
-  }
-
   writeSnapshotToJsonDisk(snapshot);
 }
 
@@ -377,19 +281,7 @@ export class JsonFileSnapshotStore implements SnapshotStore {
   }
 }
 
-export class SqliteSnapshotStore implements SnapshotStore {
-  read(): ProjectSnapshot {
-    return readSnapshotFromSqlite();
-  }
-
-  write(snapshot: ProjectSnapshot): void {
-    writeSnapshotToSqlite(snapshot);
-  }
-
-  getLabel(): string {
-    return sqliteFile;
-  }
-}
+// SQLite support removed - using JSON storage only
 
 export class MemorySnapshotStore implements SnapshotStore {
   private snapshot: ProjectSnapshot;
@@ -776,7 +668,7 @@ export class SnapshotProjectRepository implements ProjectRepository {
 }
 
 function createDefaultSnapshotStore(): SnapshotStore {
-  return getActiveDataDriver() === 'sqlite' ? new SqliteSnapshotStore() : new JsonFileSnapshotStore();
+  return new JsonFileSnapshotStore();
 }
 
 const defaultStore = createDefaultSnapshotStore();
@@ -791,17 +683,12 @@ export function getProjectRepository(): ProjectRepository {
 }
 
 export function getDataFilePath() {
-  if (getActiveDataDriver() === 'sqlite') {
-    ensureSqliteDatabaseFile();
-    return sqliteFile;
-  }
-
   ensureJsonDataFile();
   return dataFile;
 }
 
 export function getSnapshotStoreLabel(): string {
-  return `${getActiveDataDriver()}:${defaultStore.getLabel()}`;
+  return `json:${defaultStore.getLabel()}`;
 }
 
 export function getProjectSnapshot(): ProjectSnapshot {
