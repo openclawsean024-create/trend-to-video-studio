@@ -1,6 +1,11 @@
 import 'server-only';
-import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+// Lazy import for better-sqlite3 - only loaded when SQLite driver is actually used
+function getDatabase() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('better-sqlite3') as typeof import('better-sqlite3').default;
+}
 import { dirname, resolve } from 'node:path';
 
 export type JobStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
@@ -246,6 +251,7 @@ function ensureSqliteDatabaseFile() {
 
 function createSqliteDatabaseConnection() {
   ensureSqliteDatabaseFile();
+  const Database = getDatabase();
   const database = new Database(sqliteFile);
   database.pragma('journal_mode = WAL');
   database.exec(`
@@ -278,7 +284,7 @@ function writeSnapshotToSqlite(snapshot: ProjectSnapshot): void {
   database.close();
 }
 
-function migrateJsonSnapshotToSqliteIfNeeded(database: Database.Database): void {
+function migrateJsonSnapshotToSqliteIfNeeded(database: ReturnType<typeof getDatabase>): void {
   const row = database
     .prepare('SELECT json FROM project_snapshot WHERE key = ?')
     .get('default') as { json: string } | undefined;
